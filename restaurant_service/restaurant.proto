@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package restaurant;
+
+service RestaurantService {
+  rpc GetMenu (RestaurantRequest) returns (MenuResponse) {}
+  rpc UpdateStatus (StatusRequest) returns (StatusResponse) {}
+}
+
+message RestaurantRequest {
+  string restaurant_id = 1;
+}
+
+message MenuItem {
+  string item_id = 1;
+  string name = 2;
+  float price = 3;
+}
+
+message MenuResponse {
+  string restaurant_id = 1;
+  bool is_open = 2;
+  repeated MenuItem items = 3;
+}
+
+message StatusRequest {
+  string restaurant_id = 1;
+  bool is_open = 2;
+}
+
+message StatusResponse {
+  bool success = 1;
+}
