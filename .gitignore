@@ -41,6 +41,7 @@ crash.log
 
 # Keep local documentation out of this source-only Git update
 *.md
+!/CLOUD_DEPLOYMENT_HANDOFF.md
 *.markdown
 [Rr][Ee][Aa][Dd][Mm][Ee]
 # Local evidence, runtime records and private key containers
