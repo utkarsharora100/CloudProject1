@@ -1,0 +1,934 @@
+{
+  "services": {
+    "log-directory-init": {
+      "image": "busybox:1.37.0",
+      "command": [
+        "sh",
+        "-c",
+        "mkdir -p /logs && chmod 1777 /logs"
+      ],
+      "volumes": [
+        "application-logs:/logs"
+      ]
+    },
+    "gcs": {
+      "image": "fsouza/fake-gcs-server:1.56.1",
+      "command": [
+        "-scheme",
+        "http",
+        "-port",
+        "4443",
+        "-public-host",
+        "gcs:4443",
+        "-backend",
+        "filesystem",
+        "-filesystem-root",
+        "/data"
+      ],
+      "volumes": [
+        "gcs-data:/data"
+      ],
+      "ports": [
+        "127.0.0.1:14443:4443"
+      ]
+    },
+    "pubsub": {
+      "image": "gcr.io/google.com/cloudsdktool/google-cloud-cli:593.0.0-emulators",
+      "command": [
+        "gcloud",
+        "beta",
+        "emulators",
+        "pubsub",
+        "start",
+        "--host-port=0.0.0.0:8085",
+        "--project=demo-food-delivery",
+        "--quiet"
+      ],
+      "ports": [
+        "127.0.0.1:18089:8085"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "/google-cloud-sdk/platform/bundledpythonunix/bin/python3",
+          "-c",
+          "import socket; socket.create_connection(('127.0.0.1',8085),2).close()"
+        ],
+        "interval": "5s",
+        "timeout": "4s",
+        "retries": 30
+      }
+    },
+    "assignment-init": {
+      "image": "cloudproject1-app:handoff",
+      "environment": {
+        "APP_ENV": "local",
+        "PROJECT_ID": "demo-food-delivery",
+        "FIRESTORE_EMULATOR_HOST": "firestore:8080",
+        "PUBSUB_EMULATOR_HOST": "pubsub:8085",
+        "STORAGE_EMULATOR_HOST": "http://gcs:4443",
+        "NOTIFICATION_RECEIPTS_BUCKET": "food-notification-receipts",
+        "NOTIFICATION_DISPATCH_TOPIC": "notification-dispatch",
+        "LOG_DIR": "/var/log/food",
+        "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092",
+        "KAFKA_SECURITY_PROTOCOL": "PLAINTEXT"
+      },
+      "command": [
+        "python",
+        "-m",
+        "local.assignment_init"
+      ],
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "depends_on": {
+        "gcs": {
+          "condition": "service_started"
+        },
+        "pubsub": {
+          "condition": "service_healthy"
+        },
+        "kafka": {
+          "condition": "service_healthy"
+        },
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        },
+        "kafka-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "notification-function": {
+      "image": "food-notification-function:local",
+      "environment": {
+        "APP_ENV": "local",
+        "PROJECT_ID": "demo-food-delivery",
+        "FIRESTORE_EMULATOR_HOST": "firestore:8080",
+        "PUBSUB_EMULATOR_HOST": "pubsub:8085",
+        "STORAGE_EMULATOR_HOST": "http://gcs:4443",
+        "NOTIFICATION_RECEIPTS_BUCKET": "food-notification-receipts",
+        "NOTIFICATION_DISPATCH_TOPIC": "notification-dispatch",
+        "LOG_DIR": "/var/log/food"
+      },
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "depends_on": {
+        "assignment-init": {
+          "condition": "service_completed_successfully"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; socket.create_connection(('127.0.0.1',8080),2).close()"
+        ],
+        "interval": "5s",
+        "timeout": "3s",
+        "retries": 20
+      }
+    },
+    "notification-function-bridge": {
+      "image": "cloudproject1-app:handoff",
+      "environment": {
+        "APP_ENV": "local",
+        "PROJECT_ID": "demo-food-delivery",
+        "FIRESTORE_EMULATOR_HOST": "firestore:8080",
+        "PUBSUB_EMULATOR_HOST": "pubsub:8085",
+        "STORAGE_EMULATOR_HOST": "http://gcs:4443",
+        "NOTIFICATION_RECEIPTS_BUCKET": "food-notification-receipts",
+        "NOTIFICATION_DISPATCH_TOPIC": "notification-dispatch",
+        "LOG_DIR": "/var/log/food"
+      },
+      "command": [
+        "python",
+        "-m",
+        "local.function_bridge"
+      ],
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "depends_on": {
+        "notification-function": {
+          "condition": "service_healthy"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "-c",
+          "import json,time; from pathlib import Path; d=json.loads(Path('/tmp/function-bridge-heartbeat.json').read_text()); assert time.time()-d['at']<30"
+        ],
+        "interval": "5s",
+        "timeout": "3s",
+        "retries": 20
+      }
+    },
+    "notification-api": {
+      "environment": {
+        "APP_ENV": "local",
+        "PROJECT_ID": "demo-food-delivery",
+        "FIRESTORE_EMULATOR_HOST": "firestore:8080",
+        "PUBSUB_EMULATOR_HOST": "pubsub:8085",
+        "STORAGE_EMULATOR_HOST": "http://gcs:4443",
+        "NOTIFICATION_RECEIPTS_BUCKET": "food-notification-receipts",
+        "NOTIFICATION_DISPATCH_TOPIC": "notification-dispatch",
+        "LOG_DIR": "/var/log/food",
+        "NOTIFICATION_TRANSPORT": "function"
+      },
+      "depends_on": {
+        "assignment-init": {
+          "condition": "service_completed_successfully"
+        },
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      },
+      "volumes": [
+        "application-logs:/var/log/food"
+      ]
+    },
+    "flink-jobmanager": {
+      "image": "food-restaurant-analytics:local",
+      "environment": {
+        "APP_ENV": "local",
+        "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092",
+        "KAFKA_SECURITY_PROTOCOL": "PLAINTEXT",
+        "FLINK_PROPERTIES": "jobmanager.rpc.address: flink-jobmanager\ntaskmanager.numberOfTaskSlots: 2\nparallelism.default: 1\njobmanager.memory.process.size: 768m\ntaskmanager.memory.process.size: 1024m\nmetrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory\nmetrics.reporter.prom.port: 9249\n",
+        "ANALYTICS_WINDOW_SECONDS": "60",
+        "ANALYTICS_CHECKPOINT_URI": "file:///opt/flink/checkpoints"
+      },
+      "volumes": [
+        "flink-checkpoints:/opt/flink/checkpoints",
+        "application-logs:/var/log/food",
+        "./observability/flink-log4j-console.properties:/opt/flink/conf/log4j-console.properties:ro"
+      ],
+      "restart": "unless-stopped",
+      "command": [
+        "standalone-job",
+        "--job-classname",
+        "org.fooddelivery.analytics.RestaurantAnalytics"
+      ],
+      "ports": [
+        "127.0.0.1:18092:8081"
+      ],
+      "depends_on": {
+        "assignment-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "flink-taskmanager": {
+      "image": "food-restaurant-analytics:local",
+      "environment": {
+        "APP_ENV": "local",
+        "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092",
+        "KAFKA_SECURITY_PROTOCOL": "PLAINTEXT",
+        "FLINK_PROPERTIES": "jobmanager.rpc.address: flink-jobmanager\ntaskmanager.numberOfTaskSlots: 2\nparallelism.default: 1\njobmanager.memory.process.size: 768m\ntaskmanager.memory.process.size: 1024m\nmetrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory\nmetrics.reporter.prom.port: 9249\n",
+        "ANALYTICS_WINDOW_SECONDS": "60",
+        "ANALYTICS_CHECKPOINT_URI": "file:///opt/flink/checkpoints"
+      },
+      "volumes": [
+        "flink-checkpoints:/opt/flink/checkpoints",
+        "application-logs:/var/log/food",
+        "./observability/flink-log4j-console.properties:/opt/flink/conf/log4j-console.properties:ro"
+      ],
+      "restart": "unless-stopped",
+      "command": [
+        "taskmanager"
+      ],
+      "depends_on": {
+        "flink-jobmanager": {
+          "condition": "service_started"
+        }
+      }
+    },
+    "restaurant-analytics-results": {
+      "image": "cloudproject1-app:handoff",
+      "environment": {
+        "APP_ENV": "local",
+        "PROJECT_ID": "demo-food-delivery",
+        "FIRESTORE_EMULATOR_HOST": "firestore:8080",
+        "PUBSUB_EMULATOR_HOST": "pubsub:8085",
+        "STORAGE_EMULATOR_HOST": "http://gcs:4443",
+        "NOTIFICATION_RECEIPTS_BUCKET": "food-notification-receipts",
+        "NOTIFICATION_DISPATCH_TOPIC": "notification-dispatch",
+        "LOG_DIR": "/var/log/food",
+        "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092",
+        "KAFKA_SECURITY_PROTOCOL": "PLAINTEXT"
+      },
+      "command": [
+        "python",
+        "-m",
+        "restaurant_service.analytics_results"
+      ],
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "depends_on": {
+        "assignment-init": {
+          "condition": "service_completed_successfully"
+        },
+        "firestore": {
+          "condition": "service_healthy"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "-c",
+          "import json,time; from pathlib import Path; d=json.loads(Path('/tmp/restaurant-analytics-results-heartbeat.json').read_text()); assert time.time()-d['at']<20"
+        ],
+        "interval": "5s",
+        "timeout": "3s",
+        "retries": 20
+      }
+    },
+    "restaurant-analytics-api": {
+      "image": "cloudproject1-app:handoff",
+      "environment": {
+        "APP_ENV": "local",
+        "PROJECT_ID": "demo-food-delivery",
+        "FIRESTORE_EMULATOR_HOST": "firestore:8080",
+        "PUBSUB_EMULATOR_HOST": "pubsub:8085",
+        "STORAGE_EMULATOR_HOST": "http://gcs:4443",
+        "NOTIFICATION_RECEIPTS_BUCKET": "food-notification-receipts",
+        "NOTIFICATION_DISPATCH_TOPIC": "notification-dispatch",
+        "LOG_DIR": "/var/log/food"
+      },
+      "command": [
+        "python",
+        "-m",
+        "restaurant_service.analytics_api"
+      ],
+      "ports": [
+        "127.0.0.1:18091:8091"
+      ],
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "depends_on": {
+        "firestore": {
+          "condition": "service_healthy"
+        }
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "python",
+          "-c",
+          "import json; from urllib.request import urlopen; assert json.load(urlopen('http://127.0.0.1:8091/health'))['status']=='healthy'"
+        ],
+        "interval": "5s",
+        "timeout": "5s",
+        "retries": 20
+      }
+    },
+    "prometheus": {
+      "image": "prom/prometheus:v3.16.0",
+      "command": [
+        "--config.file=/etc/prometheus/prometheus.yml",
+        "--storage.tsdb.retention.time=24h"
+      ],
+      "volumes": [
+        "./observability/prometheus.yaml:/etc/prometheus/prometheus.yml:ro",
+        "./observability/alerts.yaml:/etc/prometheus/alerts.yaml:ro",
+        "prometheus-data:/prometheus"
+      ],
+      "ports": [
+        "127.0.0.1:19090:9090"
+      ]
+    },
+    "loki": {
+      "image": "grafana/loki:3.7.10",
+      "command": [
+        "-config.file=/etc/loki/config.yaml"
+      ],
+      "volumes": [
+        "./observability/loki.yaml:/etc/loki/config.yaml:ro",
+        "loki-data:/loki"
+      ],
+      "ports": [
+        "127.0.0.1:13100:3100"
+      ]
+    },
+    "log-collector": {
+      "image": "fluent/fluent-bit:5.2.0",
+      "volumes": [
+        "./observability/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro",
+        "application-logs:/var/log/food:ro",
+        "log-collector-state:/fluent-bit/state"
+      ],
+      "depends_on": {
+        "loki": {
+          "condition": "service_started"
+        }
+      }
+    },
+    "grafana": {
+      "image": "grafana/grafana:13.3.1",
+      "environment": {
+        "GF_AUTH_ANONYMOUS_ENABLED": "true",
+        "GF_AUTH_ANONYMOUS_ORG_ROLE": "Viewer",
+        "GF_SECURITY_ADMIN_PASSWORD": "local-demo-only",
+        "GF_ANALYTICS_REPORTING_ENABLED": "false",
+        "GF_ANALYTICS_CHECK_FOR_UPDATES": "false"
+      },
+      "volumes": [
+        "./observability/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/supper.yaml:ro",
+        "./observability/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/supper.yaml:ro",
+        "./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro",
+        "grafana-data:/var/lib/grafana"
+      ],
+      "ports": [
+        "127.0.0.1:13000:3000"
+      ],
+      "depends_on": {
+        "prometheus": {
+          "condition": "service_started"
+        },
+        "loki": {
+          "condition": "service_started"
+        }
+      }
+    },
+    "flink-contract": {
+      "image": "food-restaurant-analytics:local",
+      "environment": {
+        "APP_ENV": "local",
+        "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092",
+        "KAFKA_SECURITY_PROTOCOL": "PLAINTEXT",
+        "FLINK_PROPERTIES": "jobmanager.rpc.address: flink-contract\ntaskmanager.numberOfTaskSlots: 2\nparallelism.default: 1\njobmanager.memory.process.size: 768m\ntaskmanager.memory.process.size: 1024m\nmetrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory\nmetrics.reporter.prom.port: 9249\n",
+        "ANALYTICS_WINDOW_SECONDS": "60",
+        "ANALYTICS_CHECKPOINT_URI": "file:///opt/flink/checkpoints",
+        "ANALYTICS_INPUT_TOPIC": "analytics_contract_input",
+        "ANALYTICS_RESULTS_TOPIC": "analytics_contract_results",
+        "ANALYTICS_GROUP": "restaurant-analytics-contract-v1",
+        "ANALYTICS_TRANSACTION_PREFIX": "restaurant-contract-v1-"
+      },
+      "volumes": [
+        "flink-checkpoints:/opt/flink/checkpoints",
+        "application-logs:/var/log/food",
+        "./observability/flink-log4j-console.properties:/opt/flink/conf/log4j-console.properties:ro"
+      ],
+      "restart": "unless-stopped",
+      "profiles": [
+        "tools"
+      ],
+      "command": [
+        "standalone-job",
+        "--job-classname",
+        "org.fooddelivery.analytics.RestaurantAnalytics"
+      ],
+      "depends_on": {
+        "assignment-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "flink-contract-worker": {
+      "image": "food-restaurant-analytics:local",
+      "environment": {
+        "APP_ENV": "local",
+        "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092",
+        "KAFKA_SECURITY_PROTOCOL": "PLAINTEXT",
+        "FLINK_PROPERTIES": "jobmanager.rpc.address: flink-contract\ntaskmanager.numberOfTaskSlots: 2\nparallelism.default: 1\njobmanager.memory.process.size: 768m\ntaskmanager.memory.process.size: 1024m\nmetrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory\nmetrics.reporter.prom.port: 9249\n",
+        "ANALYTICS_WINDOW_SECONDS": "60",
+        "ANALYTICS_CHECKPOINT_URI": "file:///opt/flink/checkpoints"
+      },
+      "volumes": [
+        "flink-checkpoints:/opt/flink/checkpoints",
+        "application-logs:/var/log/food",
+        "./observability/flink-log4j-console.properties:/opt/flink/conf/log4j-console.properties:ro"
+      ],
+      "restart": "unless-stopped",
+      "profiles": [
+        "tools"
+      ],
+      "command": [
+        "taskmanager"
+      ],
+      "depends_on": {
+        "flink-contract": {
+          "condition": "service_started"
+        }
+      }
+    },
+    "customer-service": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "delivery-init": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "delivery-outbox": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "delivery-service": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "delivery-worker-a": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "delivery-worker-b": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "kitchen-api": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "kitchen-init": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "kitchen-stage-worker-a": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "kitchen-stage-worker-b": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "kitchen-sync": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "kitchen-worker": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "notification-consumer": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "notification-init": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "notification-reconcile": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "notification-worker-a": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "notification-worker-b": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "order-init": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "order-outbox": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "order-service": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "payment-init": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "payment-service": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "payment-worker-a": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "payment-worker-b": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "restaurant-api": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "restaurant-service": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "seed": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "task-api": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "task-init": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "task-scheduler-a": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "task-scheduler-b": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "task-worker-a": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "task-worker-b": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "web-ui": {
+      "volumes": [
+        "application-logs:/var/log/food"
+      ],
+      "environment": {
+        "LOG_DIR": "/var/log/food"
+      },
+      "depends_on": {
+        "log-directory-init": {
+          "condition": "service_completed_successfully"
+        }
+      }
+    },
+    "analytics-smoke-test": {
+      "image": "cloudproject1-app:handoff",
+      "profiles": [
+        "tools"
+      ],
+      "environment": {
+        "APP_ENV": "local",
+        "KAFKA_BOOTSTRAP_SERVERS": "kafka:9092",
+        "KAFKA_SECURITY_PROTOCOL": "PLAINTEXT"
+      },
+      "command": [
+        "python",
+        "-m",
+        "local.analytics_smoke_test",
+        "prepare"
+      ],
+      "volumes": [
+        "./.local-build/evidence:/evidence"
+      ]
+    }
+  },
+  "volumes": {
+    "application-logs": {},
+    "gcs-data": {},
+    "flink-checkpoints": {},
+    "prometheus-data": {},
+    "loki-data": {},
+    "log-collector-state": {},
+    "grafana-data": {}
+  }
+}

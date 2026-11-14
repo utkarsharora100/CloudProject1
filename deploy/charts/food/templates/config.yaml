@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: food-config
+  annotations: {argocd.argoproj.io/sync-wave: '-3'}
+data:
+{{- range $key,$value := .Values.env }}
+  {{ $key }}: {{ $value | quote }}
+{{- end }}
+  WEB_PUBLIC_ORIGIN: {{ .Values.publicOrigin | quote }}
+---
+{{- range $name,$email := .Values.serviceAccounts }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: food-{{ $name }}
+  annotations:
+    argocd.argoproj.io/sync-wave: '-3'
+    iam.gke.io/gcp-service-account: {{ $email | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: food-worker
+automountServiceAccountToken: false
+---
+{{- if hasKey .Values.workloads "web-ui" }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: web-data
+  annotations: {argocd.argoproj.io/sync-wave: '2'}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: {{ .Values.webStorage }}
+
+{{- end }}

@@ -3,9 +3,9 @@
 import grpc
 import warnings
 
-import restaurant_pb2 as restaurant__pb2
+from restaurant_service import restaurant_pb2 as restaurant__service_dot_restaurant__pb2
 
-GRPC_GENERATED_VERSION = '1.84.1'
+GRPC_GENERATED_VERSION = '1.85.1'
 GRPC_VERSION = grpc.__version__
 _version_not_supported = False
 
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in restaurant_pb2_grpc.py depends on'
+        + ' but the generated code in restaurant_service/restaurant_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -36,13 +36,43 @@ class RestaurantServiceStub:
         """
         self.GetMenu = channel.unary_unary(
                 '/restaurant.RestaurantService/GetMenu',
-                request_serializer=restaurant__pb2.RestaurantRequest.SerializeToString,
-                response_deserializer=restaurant__pb2.MenuResponse.FromString,
+                request_serializer=restaurant__service_dot_restaurant__pb2.RestaurantRequest.SerializeToString,
+                response_deserializer=restaurant__service_dot_restaurant__pb2.MenuResponse.FromString,
                 _registered_method=True)
         self.UpdateStatus = channel.unary_unary(
                 '/restaurant.RestaurantService/UpdateStatus',
-                request_serializer=restaurant__pb2.StatusRequest.SerializeToString,
-                response_deserializer=restaurant__pb2.StatusResponse.FromString,
+                request_serializer=restaurant__service_dot_restaurant__pb2.StatusRequest.SerializeToString,
+                response_deserializer=restaurant__service_dot_restaurant__pb2.StatusResponse.FromString,
+                _registered_method=True)
+        self.ListRestaurants = channel.unary_unary(
+                '/restaurant.RestaurantService/ListRestaurants',
+                request_serializer=restaurant__service_dot_restaurant__pb2.ListRequest.SerializeToString,
+                response_deserializer=restaurant__service_dot_restaurant__pb2.RestaurantList.FromString,
+                _registered_method=True)
+        self.CreateRestaurant = channel.unary_unary(
+                '/restaurant.RestaurantService/CreateRestaurant',
+                request_serializer=restaurant__service_dot_restaurant__pb2.Restaurant.SerializeToString,
+                response_deserializer=restaurant__service_dot_restaurant__pb2.Restaurant.FromString,
+                _registered_method=True)
+        self.GetRestaurant = channel.unary_unary(
+                '/restaurant.RestaurantService/GetRestaurant',
+                request_serializer=restaurant__service_dot_restaurant__pb2.RestaurantRequest.SerializeToString,
+                response_deserializer=restaurant__service_dot_restaurant__pb2.Restaurant.FromString,
+                _registered_method=True)
+        self.UpdateRestaurant = channel.unary_unary(
+                '/restaurant.RestaurantService/UpdateRestaurant',
+                request_serializer=restaurant__service_dot_restaurant__pb2.UpdateRestaurantRequest.SerializeToString,
+                response_deserializer=restaurant__service_dot_restaurant__pb2.Restaurant.FromString,
+                _registered_method=True)
+        self.UpsertMenuItem = channel.unary_unary(
+                '/restaurant.RestaurantService/UpsertMenuItem',
+                request_serializer=restaurant__service_dot_restaurant__pb2.MenuItemRequest.SerializeToString,
+                response_deserializer=restaurant__service_dot_restaurant__pb2.MenuItemResult.FromString,
+                _registered_method=True)
+        self.RemoveMenuItem = channel.unary_unary(
+                '/restaurant.RestaurantService/RemoveMenuItem',
+                request_serializer=restaurant__service_dot_restaurant__pb2.RemoveMenuItemRequest.SerializeToString,
+                response_deserializer=restaurant__service_dot_restaurant__pb2.StatusResponse.FromString,
                 _registered_method=True)
 
 
@@ -61,18 +91,84 @@ class RestaurantServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListRestaurants(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def CreateRestaurant(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetRestaurant(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateRestaurant(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpsertMenuItem(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RemoveMenuItem(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_RestaurantServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetMenu': grpc.unary_unary_rpc_method_handler(
                     servicer.GetMenu,
-                    request_deserializer=restaurant__pb2.RestaurantRequest.FromString,
-                    response_serializer=restaurant__pb2.MenuResponse.SerializeToString,
+                    request_deserializer=restaurant__service_dot_restaurant__pb2.RestaurantRequest.FromString,
+                    response_serializer=restaurant__service_dot_restaurant__pb2.MenuResponse.SerializeToString,
             ),
             'UpdateStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateStatus,
-                    request_deserializer=restaurant__pb2.StatusRequest.FromString,
-                    response_serializer=restaurant__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=restaurant__service_dot_restaurant__pb2.StatusRequest.FromString,
+                    response_serializer=restaurant__service_dot_restaurant__pb2.StatusResponse.SerializeToString,
+            ),
+            'ListRestaurants': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListRestaurants,
+                    request_deserializer=restaurant__service_dot_restaurant__pb2.ListRequest.FromString,
+                    response_serializer=restaurant__service_dot_restaurant__pb2.RestaurantList.SerializeToString,
+            ),
+            'CreateRestaurant': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateRestaurant,
+                    request_deserializer=restaurant__service_dot_restaurant__pb2.Restaurant.FromString,
+                    response_serializer=restaurant__service_dot_restaurant__pb2.Restaurant.SerializeToString,
+            ),
+            'GetRestaurant': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetRestaurant,
+                    request_deserializer=restaurant__service_dot_restaurant__pb2.RestaurantRequest.FromString,
+                    response_serializer=restaurant__service_dot_restaurant__pb2.Restaurant.SerializeToString,
+            ),
+            'UpdateRestaurant': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateRestaurant,
+                    request_deserializer=restaurant__service_dot_restaurant__pb2.UpdateRestaurantRequest.FromString,
+                    response_serializer=restaurant__service_dot_restaurant__pb2.Restaurant.SerializeToString,
+            ),
+            'UpsertMenuItem': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpsertMenuItem,
+                    request_deserializer=restaurant__service_dot_restaurant__pb2.MenuItemRequest.FromString,
+                    response_serializer=restaurant__service_dot_restaurant__pb2.MenuItemResult.SerializeToString,
+            ),
+            'RemoveMenuItem': grpc.unary_unary_rpc_method_handler(
+                    servicer.RemoveMenuItem,
+                    request_deserializer=restaurant__service_dot_restaurant__pb2.RemoveMenuItemRequest.FromString,
+                    response_serializer=restaurant__service_dot_restaurant__pb2.StatusResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -100,8 +196,8 @@ class RestaurantService:
             request,
             target,
             '/restaurant.RestaurantService/GetMenu',
-            restaurant__pb2.RestaurantRequest.SerializeToString,
-            restaurant__pb2.MenuResponse.FromString,
+            restaurant__service_dot_restaurant__pb2.RestaurantRequest.SerializeToString,
+            restaurant__service_dot_restaurant__pb2.MenuResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -127,8 +223,170 @@ class RestaurantService:
             request,
             target,
             '/restaurant.RestaurantService/UpdateStatus',
-            restaurant__pb2.StatusRequest.SerializeToString,
-            restaurant__pb2.StatusResponse.FromString,
+            restaurant__service_dot_restaurant__pb2.StatusRequest.SerializeToString,
+            restaurant__service_dot_restaurant__pb2.StatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListRestaurants(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/restaurant.RestaurantService/ListRestaurants',
+            restaurant__service_dot_restaurant__pb2.ListRequest.SerializeToString,
+            restaurant__service_dot_restaurant__pb2.RestaurantList.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CreateRestaurant(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/restaurant.RestaurantService/CreateRestaurant',
+            restaurant__service_dot_restaurant__pb2.Restaurant.SerializeToString,
+            restaurant__service_dot_restaurant__pb2.Restaurant.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetRestaurant(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/restaurant.RestaurantService/GetRestaurant',
+            restaurant__service_dot_restaurant__pb2.RestaurantRequest.SerializeToString,
+            restaurant__service_dot_restaurant__pb2.Restaurant.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateRestaurant(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/restaurant.RestaurantService/UpdateRestaurant',
+            restaurant__service_dot_restaurant__pb2.UpdateRestaurantRequest.SerializeToString,
+            restaurant__service_dot_restaurant__pb2.Restaurant.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpsertMenuItem(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/restaurant.RestaurantService/UpsertMenuItem',
+            restaurant__service_dot_restaurant__pb2.MenuItemRequest.SerializeToString,
+            restaurant__service_dot_restaurant__pb2.MenuItemResult.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RemoveMenuItem(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/restaurant.RestaurantService/RemoveMenuItem',
+            restaurant__service_dot_restaurant__pb2.RemoveMenuItemRequest.SerializeToString,
+            restaurant__service_dot_restaurant__pb2.StatusResponse.FromString,
             options,
             channel_credentials,
             insecure,

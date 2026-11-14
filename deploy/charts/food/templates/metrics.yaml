@@ -1,0 +1,10 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: food-http
+  labels: {release: monitoring}
+spec:
+  selector: {matchLabels: {part-of: food, metrics: enabled}}
+  endpoints: [{port: http, path: /metrics, interval: 15s}]
+{{- end }}

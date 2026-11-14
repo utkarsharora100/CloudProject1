@@ -1,0 +1,13 @@
+groups:
+  - name: food-services
+    rules:
+      - alert: FoodServiceUnavailable
+        expr: up{job="food-apis"} == 0
+        for: 1m
+        labels: {severity: warning}
+        annotations: {summary: "A food-delivery API scrape target is unavailable"}
+      - alert: FoodServiceHighErrorRate
+        expr: sum by(service)(rate(food_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum by(service)(rate(food_http_requests_total[5m])), 0.001) > 0.05
+        for: 2m
+        labels: {severity: warning}
+        annotations: {summary: "A service has more than 5 percent server errors"}

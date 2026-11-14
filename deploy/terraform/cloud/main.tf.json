@@ -1,0 +1,827 @@
+{
+  "terraform": {
+    "required_version": ">=1.6.0",
+    "required_providers": {
+      "google": {
+        "source": "hashicorp/google",
+        "version": "7.25.0"
+      },
+      "random": {
+        "source": "hashicorp/random",
+        "version": "3.7.2"
+      }
+    },
+    "backend": {
+      "gcs": {}
+    }
+  },
+  "provider": {
+    "google": {
+      "project": "${var.project_id}",
+      "region": "${var.region}",
+      "zone": "${var.zone}"
+    }
+  },
+  "variable": {
+    "project_id": {
+      "type": "string"
+    },
+    "region": {
+      "type": "string"
+    },
+    "zone": {
+      "type": "string"
+    },
+    "prefix": {
+      "type": "string"
+    },
+    "kafka_bootstrap": {
+      "type": "string"
+    },
+    "public_host": {
+      "type": "string"
+    },
+    "dns_zone": {
+      "type": "string",
+      "default": ""
+    },
+    "admin_cidr": {
+      "type": "string"
+    },
+    "kafka_api_key": {
+      "type": "string",
+      "sensitive": true
+    },
+    "kafka_api_secret": {
+      "type": "string",
+      "sensitive": true
+    },
+    "operator_user": {
+      "type": "string"
+    },
+    "operator_password_hash": {
+      "type": "string",
+      "sensitive": true
+    },
+    "create_firestore": {
+      "type": "bool",
+      "default": true
+    }
+  },
+  "resource": {
+    "google_project_service": {
+      "apis": {
+        "for_each": "${toset([\"compute.googleapis.com\",\"container.googleapis.com\",\"sqladmin.googleapis.com\",\"servicenetworking.googleapis.com\",\"firestore.googleapis.com\",\"storage.googleapis.com\",\"pubsub.googleapis.com\",\"cloudfunctions.googleapis.com\",\"run.googleapis.com\",\"eventarc.googleapis.com\",\"cloudbuild.googleapis.com\",\"artifactregistry.googleapis.com\",\"secretmanager.googleapis.com\",\"dataproc.googleapis.com\",\"logging.googleapis.com\",\"monitoring.googleapis.com\",\"iamcredentials.googleapis.com\",\"dns.googleapis.com\"])}",
+        "service": "${each.value}",
+        "disable_on_destroy": false
+      }
+    },
+    "google_compute_network": {
+      "vpc": {
+        "name": "${var.prefix}-vpc",
+        "auto_create_subnetworks": false,
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      }
+    },
+    "google_compute_subnetwork": {
+      "subnet": {
+        "name": "${var.prefix}-subnet",
+        "region": "${var.region}",
+        "network": "${google_compute_network.vpc.id}",
+        "ip_cidr_range": "10.40.0.0/20",
+        "private_ip_google_access": true,
+        "secondary_ip_range": [
+          {
+            "range_name": "pods",
+            "ip_cidr_range": "10.44.0.0/16"
+          },
+          {
+            "range_name": "services",
+            "ip_cidr_range": "10.45.0.0/20"
+          }
+        ]
+      }
+    },
+    "google_compute_router": {
+      "router": {
+        "name": "${var.prefix}-router",
+        "region": "${var.region}",
+        "network": "${google_compute_network.vpc.id}"
+      }
+    },
+    "google_compute_router_nat": {
+      "nat": {
+        "name": "${var.prefix}-nat",
+        "router": "${google_compute_router.router.name}",
+        "region": "${var.region}",
+        "nat_ip_allocate_option": "AUTO_ONLY",
+        "source_subnetwork_ip_ranges_to_nat": "ALL_SUBNETWORKS_ALL_IP_RANGES",
+        "log_config": {
+          "enable": true,
+          "filter": "ERRORS_ONLY"
+        }
+      }
+    },
+    "google_compute_global_address": {
+      "private": {
+        "name": "${var.prefix}-private-services",
+        "purpose": "VPC_PEERING",
+        "address_type": "INTERNAL",
+        "prefix_length": 16,
+        "network": "${google_compute_network.vpc.id}"
+      },
+      "web": {
+        "name": "${var.prefix}-web-ip",
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      }
+    },
+    "google_service_networking_connection": {
+      "private": {
+        "network": "${google_compute_network.vpc.id}",
+        "service": "servicenetworking.googleapis.com",
+        "reserved_peering_ranges": [
+          "${google_compute_global_address.private.name}"
+        ]
+      }
+    },
+    "google_dns_record_set": {
+      "web": {
+        "count": "${var.dns_zone == \"\" ? 0 : 1}",
+        "managed_zone": "${var.dns_zone}",
+        "name": "${var.public_host}.",
+        "type": "A",
+        "ttl": 300,
+        "rrdatas": [
+          "${google_compute_global_address.web.address}"
+        ]
+      }
+    },
+    "google_service_account": {
+      "identities": {
+        "for_each": "${toset([\"node\",\"sql\",\"firestore\",\"combined\",\"notify\",\"secrets\",\"flink\",\"function\",\"trigger\",\"build\",\"launcher\"])}",
+        "account_id": "${var.prefix}-${each.value}",
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      }
+    },
+    "google_project_iam_member": {
+      "role_0": {
+        "project": "${var.project_id}",
+        "role": "roles/logging.logWriter",
+        "member": "serviceAccount:${google_service_account.identities[\"node\"].email}"
+      },
+      "role_1": {
+        "project": "${var.project_id}",
+        "role": "roles/monitoring.metricWriter",
+        "member": "serviceAccount:${google_service_account.identities[\"node\"].email}"
+      },
+      "role_2": {
+        "project": "${var.project_id}",
+        "role": "roles/artifactregistry.reader",
+        "member": "serviceAccount:${google_service_account.identities[\"node\"].email}"
+      },
+      "role_3": {
+        "project": "${var.project_id}",
+        "role": "roles/cloudsql.client",
+        "member": "serviceAccount:${google_service_account.identities[\"sql\"].email}"
+      },
+      "role_4": {
+        "project": "${var.project_id}",
+        "role": "roles/cloudsql.client",
+        "member": "serviceAccount:${google_service_account.identities[\"combined\"].email}"
+      },
+      "role_5": {
+        "project": "${var.project_id}",
+        "role": "roles/cloudsql.client",
+        "member": "serviceAccount:${google_service_account.identities[\"notify\"].email}"
+      },
+      "role_6": {
+        "project": "${var.project_id}",
+        "role": "roles/datastore.user",
+        "member": "serviceAccount:${google_service_account.identities[\"firestore\"].email}"
+      },
+      "role_7": {
+        "project": "${var.project_id}",
+        "role": "roles/datastore.user",
+        "member": "serviceAccount:${google_service_account.identities[\"combined\"].email}"
+      },
+      "role_8": {
+        "project": "${var.project_id}",
+        "role": "roles/dataproc.worker",
+        "member": "serviceAccount:${google_service_account.identities[\"flink\"].email}"
+      },
+      "role_9": {
+        "project": "${var.project_id}",
+        "role": "roles/logging.logWriter",
+        "member": "serviceAccount:${google_service_account.identities[\"flink\"].email}"
+      },
+      "role_10": {
+        "project": "${var.project_id}",
+        "role": "roles/monitoring.metricWriter",
+        "member": "serviceAccount:${google_service_account.identities[\"flink\"].email}"
+      },
+      "role_11": {
+        "project": "${var.project_id}",
+        "role": "roles/eventarc.eventReceiver",
+        "member": "serviceAccount:${google_service_account.identities[\"trigger\"].email}"
+      },
+      "role_12": {
+        "project": "${var.project_id}",
+        "role": "roles/logging.logWriter",
+        "member": "serviceAccount:${google_service_account.identities[\"build\"].email}"
+      },
+      "launcher": {
+        "project": "${var.project_id}",
+        "role": "${google_project_iam_custom_role.launcher.name}",
+        "member": "serviceAccount:${google_service_account.identities[\"launcher\"].email}"
+      }
+    },
+    "google_service_account_iam_member": {
+      "wif_sql": {
+        "service_account_id": "${google_service_account.identities[\"sql\"].name}",
+        "role": "roles/iam.workloadIdentityUser",
+        "member": "serviceAccount:${var.project_id}.svc.id.goog[food/food-sql]"
+      },
+      "wif_firestore": {
+        "service_account_id": "${google_service_account.identities[\"firestore\"].name}",
+        "role": "roles/iam.workloadIdentityUser",
+        "member": "serviceAccount:${var.project_id}.svc.id.goog[food/food-firestore]"
+      },
+      "wif_combined": {
+        "service_account_id": "${google_service_account.identities[\"combined\"].name}",
+        "role": "roles/iam.workloadIdentityUser",
+        "member": "serviceAccount:${var.project_id}.svc.id.goog[food/food-combined]"
+      },
+      "wif_notification": {
+        "service_account_id": "${google_service_account.identities[\"notify\"].name}",
+        "role": "roles/iam.workloadIdentityUser",
+        "member": "serviceAccount:${var.project_id}.svc.id.goog[food/food-notification]"
+      },
+      "wif_eso": {
+        "service_account_id": "${google_service_account.identities[\"secrets\"].name}",
+        "role": "roles/iam.workloadIdentityUser",
+        "member": "serviceAccount:${var.project_id}.svc.id.goog[food/food-eso]"
+      },
+      "pubsub_token": {
+        "service_account_id": "${google_service_account.identities[\"trigger\"].name}",
+        "role": "roles/iam.serviceAccountTokenCreator",
+        "member": "serviceAccount:service-${data.google_project.current.number}@gcp-sa-pubsub.iam.gserviceaccount.com",
+        "depends_on": [
+          "google_pubsub_topic.dispatch"
+        ]
+      },
+      "wif_launcher": {
+        "service_account_id": "${google_service_account.identities[\"launcher\"].name}",
+        "role": "roles/iam.workloadIdentityUser",
+        "member": "serviceAccount:${var.project_id}.svc.id.goog[food/food-launcher]"
+      },
+      "launcher_actas": {
+        "service_account_id": "${google_service_account.identities[\"flink\"].name}",
+        "role": "roles/iam.serviceAccountUser",
+        "member": "serviceAccount:${google_service_account.identities[\"launcher\"].email}"
+      }
+    },
+    "google_container_cluster": {
+      "gke": {
+        "name": "${var.prefix}-gke",
+        "location": "${var.zone}",
+        "network": "${google_compute_network.vpc.id}",
+        "subnetwork": "${google_compute_subnetwork.subnet.id}",
+        "remove_default_node_pool": true,
+        "initial_node_count": 1,
+        "deletion_protection": true,
+        "release_channel": {
+          "channel": "REGULAR"
+        },
+        "workload_identity_config": {
+          "workload_pool": "${var.project_id}.svc.id.goog"
+        },
+        "ip_allocation_policy": {
+          "cluster_secondary_range_name": "pods",
+          "services_secondary_range_name": "services"
+        },
+        "private_cluster_config": {
+          "enable_private_nodes": true,
+          "enable_private_endpoint": false,
+          "master_ipv4_cidr_block": "172.16.0.0/28"
+        },
+        "master_authorized_networks_config": {
+          "cidr_blocks": [
+            {
+              "cidr_block": "${var.admin_cidr}",
+              "display_name": "team-deployer"
+            }
+          ]
+        },
+        "network_policy": {
+          "enabled": true,
+          "provider": "CALICO"
+        },
+        "logging_config": {
+          "enable_components": [
+            "SYSTEM_COMPONENTS",
+            "WORKLOADS"
+          ]
+        },
+        "monitoring_config": {
+          "enable_components": [
+            "SYSTEM_COMPONENTS"
+          ]
+        },
+        "depends_on": [
+          "google_compute_router_nat.nat"
+        ],
+        "addons_config": {
+          "network_policy_config": {
+            "disabled": false
+          }
+        }
+      }
+    },
+    "google_container_node_pool": {
+      "apps": {
+        "name": "apps",
+        "location": "${var.zone}",
+        "cluster": "${google_container_cluster.gke.name}",
+        "initial_node_count": 2,
+        "autoscaling": {
+          "min_node_count": 2,
+          "max_node_count": 4
+        },
+        "node_config": {
+          "machine_type": "e2-standard-4",
+          "disk_size_gb": 40,
+          "service_account": "${google_service_account.identities[\"node\"].email}",
+          "oauth_scopes": [
+            "https://www.googleapis.com/auth/cloud-platform"
+          ],
+          "workload_metadata_config": {
+            "mode": "GKE_METADATA"
+          }
+        },
+        "management": {
+          "auto_repair": true,
+          "auto_upgrade": true
+        }
+      }
+    },
+    "random_password": {
+      "database": {
+        "length": 32,
+        "special": false
+      }
+    },
+    "google_sql_database_instance": {
+      "database": {
+        "name": "${var.prefix}-sql",
+        "region": "${var.region}",
+        "database_version": "MYSQL_8_0",
+        "deletion_protection": true,
+        "settings": {
+          "tier": "db-custom-1-3840",
+          "availability_type": "ZONAL",
+          "disk_size": 10,
+          "disk_autoresize": true,
+          "backup_configuration": {
+            "enabled": true,
+            "binary_log_enabled": true
+          },
+          "ip_configuration": {
+            "ipv4_enabled": false,
+            "private_network": "${google_compute_network.vpc.id}"
+          },
+          "database_flags": [
+            {
+              "name": "max_connections",
+              "value": "500"
+            }
+          ]
+        },
+        "depends_on": [
+          "google_service_networking_connection.private"
+        ]
+      }
+    },
+    "google_sql_database": {
+      "food": {
+        "name": "food",
+        "instance": "${google_sql_database_instance.database.name}"
+      }
+    },
+    "google_sql_user": {
+      "app": {
+        "name": "food_app",
+        "instance": "${google_sql_database_instance.database.name}",
+        "host": "%",
+        "password": "${random_password.database.result}"
+      }
+    },
+    "google_firestore_database": {
+      "default": {
+        "count": "${var.create_firestore ? 1 : 0}",
+        "name": "(default)",
+        "location_id": "${var.region}",
+        "type": "FIRESTORE_NATIVE",
+        "deletion_policy": "ABANDON",
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      }
+    },
+    "google_firestore_index": {
+      "analytics": {
+        "collection": "restaurant_analytics_v1",
+        "fields": [
+          {
+            "field_path": "restaurant_id",
+            "order": "ASCENDING"
+          },
+          {
+            "field_path": "window_start",
+            "order": "DESCENDING"
+          }
+        ],
+        "depends_on": [
+          "google_firestore_database.default"
+        ]
+      }
+    },
+    "google_storage_bucket": {
+      "receipts": {
+        "name": "${var.project_id}-${var.prefix}-receipts",
+        "location": "${var.region}",
+        "uniform_bucket_level_access": true,
+        "public_access_prevention": "enforced",
+        "force_destroy": false,
+        "versioning": {
+          "enabled": true
+        },
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      },
+      "checkpoints": {
+        "name": "${var.project_id}-${var.prefix}-checkpoints",
+        "location": "${var.region}",
+        "uniform_bucket_level_access": true,
+        "public_access_prevention": "enforced",
+        "force_destroy": false,
+        "versioning": {
+          "enabled": true
+        },
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      },
+      "artifacts": {
+        "name": "${var.project_id}-${var.prefix}-artifacts",
+        "location": "${var.region}",
+        "uniform_bucket_level_access": true,
+        "public_access_prevention": "enforced",
+        "force_destroy": false,
+        "versioning": {
+          "enabled": true
+        },
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      }
+    },
+    "google_storage_bucket_iam_member": {
+      "notify_read": {
+        "bucket": "${google_storage_bucket.receipts.name}",
+        "role": "roles/storage.objectViewer",
+        "member": "serviceAccount:${google_service_account.identities[\"notify\"].email}"
+      },
+      "function_write": {
+        "bucket": "${google_storage_bucket.receipts.name}",
+        "role": "roles/storage.objectCreator",
+        "member": "serviceAccount:${google_service_account.identities[\"function\"].email}"
+      },
+      "function_read": {
+        "bucket": "${google_storage_bucket.receipts.name}",
+        "role": "roles/storage.objectViewer",
+        "member": "serviceAccount:${google_service_account.identities[\"function\"].email}"
+      },
+      "flink_state": {
+        "bucket": "${google_storage_bucket.checkpoints.name}",
+        "role": "roles/storage.objectAdmin",
+        "member": "serviceAccount:${google_service_account.identities[\"flink\"].email}"
+      },
+      "flink_artifacts": {
+        "bucket": "${google_storage_bucket.artifacts.name}",
+        "role": "roles/storage.objectAdmin",
+        "member": "serviceAccount:${google_service_account.identities[\"flink\"].email}"
+      },
+      "build_source": {
+        "bucket": "${google_storage_bucket.artifacts.name}",
+        "role": "roles/storage.objectViewer",
+        "member": "serviceAccount:${google_service_account.identities[\"build\"].email}"
+      }
+    },
+    "google_secret_manager_secret": {
+      "config": {
+        "for_each": "${toset([\"db-password\",\"kafka\",\"web-access\"])}",
+        "secret_id": "${var.prefix}-${each.value}",
+        "replication": {
+          "auto": {}
+        },
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      }
+    },
+    "google_secret_manager_secret_version": {
+      "config": {
+        "for_each": "${google_secret_manager_secret.config}",
+        "secret": "${each.value.id}",
+        "secret_data": "${local.secret_values[each.key]}"
+      }
+    },
+    "google_secret_manager_secret_iam_member": {
+      "eso": {
+        "for_each": "${google_secret_manager_secret.config}",
+        "secret_id": "${each.value.id}",
+        "role": "roles/secretmanager.secretAccessor",
+        "member": "serviceAccount:${google_service_account.identities[\"secrets\"].email}"
+      },
+      "flink": {
+        "secret_id": "${google_secret_manager_secret.config[\"kafka\"].id}",
+        "role": "roles/secretmanager.secretAccessor",
+        "member": "serviceAccount:${google_service_account.identities[\"flink\"].email}"
+      }
+    },
+    "google_pubsub_topic": {
+      "dispatch": {
+        "name": "${var.prefix}-notification-dispatch",
+        "message_retention_duration": "86400s",
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      }
+    },
+    "google_pubsub_topic_iam_member": {
+      "publish": {
+        "topic": "${google_pubsub_topic.dispatch.name}",
+        "role": "roles/pubsub.publisher",
+        "member": "serviceAccount:${google_service_account.identities[\"notify\"].email}"
+      }
+    },
+    "google_artifact_registry_repository": {
+      "app": {
+        "repository_id": "${var.prefix}-app",
+        "location": "${var.region}",
+        "format": "DOCKER",
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      },
+      "functions": {
+        "repository_id": "${var.prefix}-functions",
+        "location": "${var.region}",
+        "format": "DOCKER",
+        "depends_on": [
+          "google_project_service.apis"
+        ]
+      }
+    },
+    "google_artifact_registry_repository_iam_member": {
+      "function_build": {
+        "repository": "${google_artifact_registry_repository.functions.name}",
+        "location": "${var.region}",
+        "role": "roles/artifactregistry.writer",
+        "member": "serviceAccount:${google_service_account.identities[\"build\"].email}"
+      }
+    },
+    "google_storage_bucket_object": {
+      "function": {
+        "name": "${format(\"function-%s.zip\", filesha256(\"../../../.local-build/artifacts/notification-function.zip\"))}",
+        "bucket": "${google_storage_bucket.artifacts.name}",
+        "source": "../../../.local-build/artifacts/notification-function.zip"
+      }
+    },
+    "google_cloudfunctions2_function": {
+      "notification": {
+        "name": "${var.prefix}-notification-transport",
+        "location": "${var.region}",
+        "build_config": {
+          "runtime": "python312",
+          "entry_point": "deliver_notification",
+          "service_account": "${google_service_account.identities[\"build\"].name}",
+          "docker_repository": "${google_artifact_registry_repository.functions.id}",
+          "source": {
+            "storage_source": {
+              "bucket": "${google_storage_bucket.artifacts.name}",
+              "object": "${google_storage_bucket_object.function.name}"
+            }
+          }
+        },
+        "service_config": {
+          "available_memory": "256M",
+          "available_cpu": "1",
+          "min_instance_count": 0,
+          "max_instance_count": 3,
+          "timeout_seconds": 30,
+          "ingress_settings": "ALLOW_INTERNAL_ONLY",
+          "service_account_email": "${google_service_account.identities[\"function\"].email}",
+          "environment_variables": {
+            "APP_ENV": "cloud",
+            "CLOUD_DEPLOYMENT_ACK": "assignment-private-network-v1",
+            "PROJECT_ID": "${var.project_id}",
+            "NOTIFICATION_RECEIPTS_BUCKET": "${google_storage_bucket.receipts.name}"
+          }
+        },
+        "depends_on": [
+          "google_project_iam_member.role_11",
+          "google_storage_bucket_iam_member.function_write",
+          "google_storage_bucket_iam_member.function_read",
+          "google_artifact_registry_repository_iam_member.function_build",
+          "google_service_account_iam_member.pubsub_token"
+        ]
+      }
+    },
+    "google_cloud_run_service_iam_member": {
+      "function_invoke": {
+        "location": "${var.region}",
+        "service": "${google_cloudfunctions2_function.notification.name}",
+        "role": "roles/run.invoker",
+        "member": "serviceAccount:${google_service_account.identities[\"trigger\"].email}"
+      }
+    },
+    "google_compute_firewall": {
+      "dataproc_internal": {
+        "name": "${var.prefix}-dataproc-internal",
+        "network": "${google_compute_network.vpc.id}",
+        "source_tags": [
+          "${var.prefix}-dataproc"
+        ],
+        "target_tags": [
+          "${var.prefix}-dataproc"
+        ],
+        "allow": [
+          {
+            "protocol": "tcp",
+            "ports": [
+              "0-65535"
+            ]
+          },
+          {
+            "protocol": "udp",
+            "ports": [
+              "0-65535"
+            ]
+          },
+          {
+            "protocol": "icmp"
+          }
+        ]
+      }
+    },
+    "google_dataproc_cluster": {
+      "flink": {
+        "name": "${var.prefix}-flink",
+        "region": "${var.region}",
+        "graceful_decommission_timeout": "120s",
+        "cluster_config": {
+          "staging_bucket": "${google_storage_bucket.artifacts.name}",
+          "temp_bucket": "${google_storage_bucket.checkpoints.name}",
+          "gce_cluster_config": {
+            "zone": "${var.zone}",
+            "subnetwork": "${google_compute_subnetwork.subnet.id}",
+            "internal_ip_only": true,
+            "service_account": "${google_service_account.identities[\"flink\"].email}",
+            "service_account_scopes": [
+              "https://www.googleapis.com/auth/cloud-platform"
+            ],
+            "tags": [
+              "${var.prefix}-dataproc"
+            ]
+          },
+          "master_config": {
+            "num_instances": 1,
+            "machine_type": "e2-standard-4",
+            "disk_config": {
+              "boot_disk_size_gb": 40
+            }
+          },
+          "worker_config": {
+            "num_instances": 2,
+            "machine_type": "e2-standard-4",
+            "disk_config": {
+              "boot_disk_size_gb": 40
+            }
+          },
+          "software_config": {
+            "image_version": "3.0.4-debian13",
+            "optional_components": [
+              "FLINK"
+            ],
+            "override_properties": {
+              "dataproc:dataproc.logging.stackdriver.enable": "true",
+              "dataproc:dataproc.monitoring.stackdriver.enable": "true",
+              "dataproc:jobs.file-backed-output.enable": "true"
+            }
+          }
+        },
+        "depends_on": [
+          "google_project_iam_member.role_8",
+          "google_storage_bucket_iam_member.flink_state",
+          "google_storage_bucket_iam_member.flink_artifacts",
+          "google_compute_router_nat.nat",
+          "google_compute_firewall.dataproc_internal"
+        ]
+      }
+    },
+    "google_project_iam_custom_role": {
+      "launcher": {
+        "role_id": "${replace(var.prefix, \"-\", \"_\")}DataprocLauncher",
+        "title": "Food Dataproc job launcher",
+        "permissions": [
+          "dataproc.jobs.create",
+          "dataproc.jobs.get",
+          "dataproc.jobs.list",
+          "dataproc.clusters.use"
+        ]
+      }
+    },
+    "google_eventarc_trigger": {
+      "notification": {
+        "name": "${var.prefix}-notification-dispatch",
+        "location": "${var.region}",
+        "matching_criteria": [
+          {
+            "attribute": "type",
+            "value": "google.cloud.pubsub.topic.v1.messagePublished"
+          }
+        ],
+        "transport": {
+          "pubsub": {
+            "topic": "${google_pubsub_topic.dispatch.id}"
+          }
+        },
+        "destination": {
+          "cloud_run_service": {
+            "service": "${google_cloudfunctions2_function.notification.name}",
+            "region": "${var.region}"
+          }
+        },
+        "service_account": "${google_service_account.identities[\"trigger\"].email}",
+        "depends_on": [
+          "google_cloud_run_service_iam_member.function_invoke",
+          "google_project_iam_member.role_11"
+        ]
+      }
+    }
+  },
+  "data": {
+    "google_project": {
+      "current": {
+        "project_id": "${var.project_id}"
+      }
+    }
+  },
+  "output": {
+    "cluster_name": {
+      "value": "${google_container_cluster.gke.name}"
+    },
+    "cluster_zone": {
+      "value": "${var.zone}"
+    },
+    "sql_connection": {
+      "value": "${google_sql_database_instance.database.connection_name}"
+    },
+    "public_ip": {
+      "value": "${google_compute_global_address.web.address}"
+    },
+    "receipts_bucket": {
+      "value": "${google_storage_bucket.receipts.name}"
+    },
+    "artifacts_bucket": {
+      "value": "${google_storage_bucket.artifacts.name}"
+    },
+    "checkpoints_bucket": {
+      "value": "${google_storage_bucket.checkpoints.name}"
+    },
+    "dataproc_cluster": {
+      "value": "${google_dataproc_cluster.flink.name}"
+    },
+    "kafka_secret_version": {
+      "value": "${google_secret_manager_secret_version.config[\"kafka\"].name}"
+    },
+    "secret_versions": {
+      "value": "${ {for name, secret in google_secret_manager_secret_version.config : name => secret.version} }"
+    }
+  },
+  "locals": {
+    "secret_values": {
+      "db-password": "${random_password.database.result}",
+      "kafka": "${jsonencode({api_key=var.kafka_api_key,api_secret=var.kafka_api_secret})}",
+      "web-access": "${jsonencode({username=var.operator_user,password_hash=var.operator_password_hash})}"
+    }
+  }
+}

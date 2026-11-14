@@ -1,0 +1,976 @@
+name: cloudproject1-local
+
+x-app: &app
+  image: ${APP_IMAGE:-cloudproject1-app:local}
+  pull_policy: never
+  init: true
+  environment: &local-env
+    LOG_DIR: ${LOCAL_LOG_DIR:-}
+    APP_ENV: local
+    PROJECT_ID: demo-food-delivery
+    FIRESTORE_EMULATOR_HOST: firestore:8080
+    KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+    KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    DB_USER: customer_service_user
+    DB_PASSWORD: ${LOCAL_DB_PASSWORD:-local-db-only}
+    DB_PRIVATE_IP: mysql
+    DB_PORT: "3306"
+    DB_NAME: orders_db
+    ZK_HOSTS: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+
+services:
+  mysql:
+    image: mysql:8.0.45
+    environment:
+      MYSQL_DATABASE: orders_db
+      MYSQL_USER: customer_service_user
+      MYSQL_PASSWORD: ${LOCAL_DB_PASSWORD:-local-db-only}
+      MYSQL_ROOT_PASSWORD: ${LOCAL_DB_ROOT_PASSWORD:-local-root-only}
+    ports:
+      - "127.0.0.1:${LOCAL_MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "--host=127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  kafka:
+    image: apache/kafka:4.1.1
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://127.0.0.1:${LOCAL_KAFKA_PORT:-29092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_RETENTION_HOURS: "24"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    ports:
+      - "127.0.0.1:${LOCAL_KAFKA_PORT:-29092}:29092"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 8s
+      retries: 20
+      start_period: 20s
+
+  kafka-init:
+    image: apache/kafka:4.1.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        for topic in orders kitchen_status delivery_assignments; do
+          /opt/kafka/bin/kafka-topics.sh --create --if-not-exists --bootstrap-server kafka:9092 --topic "$$topic" --partitions 3 --replication-factor 1
+        done
+
+  firestore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:593.0.0-emulators
+    environment:
+      CLOUDSDK_CORE_DISABLE_USAGE_REPORTING: "true"
+      CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK: "true"
+      JAVA_TOOL_OPTIONS: -Xms128m -Xmx512m
+    command: ["gcloud", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080", "--project=demo-food-delivery", "--quiet"]
+    ports:
+      - "127.0.0.1:${LOCAL_FIRESTORE_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "/google-cloud-sdk/platform/bundledpythonunix/bin/python3", "-c", "import socket; socket.create_connection(('127.0.0.1', 8080), 2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
+
+  zookeeper-1:
+    image: zookeeper:3.9.7
+    environment:
+      ZOO_MY_ID: "1"
+      ZOO_SERVERS: "server.1=zookeeper-1:2888:3888;2181 server.2=zookeeper-2:2888:3888;2181 server.3=zookeeper-3:2888:3888;2181"
+      ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr,mntr
+      JVMFLAGS: -Xms64m -Xmx256m
+    ports:
+      - "127.0.0.1:${LOCAL_ZK_1_PORT:-2181}:2181"
+    volumes:
+      - zk-1-data:/data
+      - zk-1-log:/datalog
+    healthcheck:
+      test: ["CMD", "zkServer.sh", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  zookeeper-2:
+    image: zookeeper:3.9.7
+    environment:
+      ZOO_MY_ID: "2"
+      ZOO_SERVERS: "server.1=zookeeper-1:2888:3888;2181 server.2=zookeeper-2:2888:3888;2181 server.3=zookeeper-3:2888:3888;2181"
+      ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr,mntr
+      JVMFLAGS: -Xms64m -Xmx256m
+    ports:
+      - "127.0.0.1:${LOCAL_ZK_2_PORT:-2182}:2181"
+    volumes:
+      - zk-2-data:/data
+      - zk-2-log:/datalog
+    healthcheck:
+      test: ["CMD", "zkServer.sh", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  zookeeper-3:
+    image: zookeeper:3.9.7
+    environment:
+      ZOO_MY_ID: "3"
+      ZOO_SERVERS: "server.1=zookeeper-1:2888:3888;2181 server.2=zookeeper-2:2888:3888;2181 server.3=zookeeper-3:2888:3888;2181"
+      ZOO_4LW_COMMANDS_WHITELIST: ruok,srvr,mntr
+      JVMFLAGS: -Xms64m -Xmx256m
+    ports:
+      - "127.0.0.1:${LOCAL_ZK_3_PORT:-2183}:2181"
+    volumes:
+      - zk-3-data:/data
+      - zk-3-log:/datalog
+    healthcheck:
+      test: ["CMD", "zkServer.sh", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+
+  seed:
+    <<: *app
+    command: ["python", "-m", "local.seed"]
+    depends_on:
+      firestore:
+        condition: service_healthy
+
+  order-init:
+    <<: *app
+    environment: &order-db-env
+      APP_ENV: local
+      DB_USER: customer_service_user
+      DB_PASSWORD: ${LOCAL_DB_PASSWORD:-local-db-only}
+      DB_PRIVATE_IP: mysql
+      DB_PORT: "3306"
+      DB_NAME: orders_db
+    command: ["python", "-m", "order_service.schema"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  order-service:
+    <<: *app
+    environment:
+      <<: *order-db-env
+      CUSTOMER_API_URL: http://customer-service:8083
+      RESTAURANT_GRPC_TARGET: restaurant-service:50051
+    # Build the shared image once; all other application services reuse it.
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    command: ["python", "-m", "order_service.event_producer"]
+    ports:
+      - "127.0.0.1:${LOCAL_ORDER_PORT:-8081}:8081"
+    depends_on:
+      notification-init:
+        condition: service_completed_successfully
+
+      customer-service:
+        condition: service_healthy
+      restaurant-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "order"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  order-outbox:
+    <<: *app
+    environment:
+      <<: *order-db-env
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    command: ["python", "-m", "order_service.outbox"]
+    depends_on:
+      order-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "order-outbox"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  task-init:
+    <<: *app
+    environment: *order-db-env
+    command: ["python", "-m", "task_scheduler.schema"]
+    depends_on:
+      notification-init:
+        condition: service_completed_successfully
+
+  task-api:
+    <<: *app
+    environment: &scheduler-env
+      <<: *order-db-env
+      ZK_HOSTS: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+    command: ["python", "-m", "task_scheduler.api"]
+    ports:
+      - "127.0.0.1:${LOCAL_TASK_PORT:-8085}:8085"
+    depends_on: &scheduler-dependencies
+      task-init:
+        condition: service_completed_successfully
+      zookeeper-1:
+        condition: service_healthy
+      zookeeper-2:
+        condition: service_healthy
+      zookeeper-3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "task-api"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  task-scheduler-a:
+    <<: *app
+    environment:
+      <<: *scheduler-env
+      SCHEDULER_NAME: scheduler-a
+    command: ["python", "-m", "task_scheduler.leader"]
+    depends_on: *scheduler-dependencies
+    healthcheck: &scheduler-health
+      test: ["CMD", "python", "-m", "local.healthcheck", "task-leader"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  task-scheduler-b:
+    <<: *app
+    environment:
+      <<: *scheduler-env
+      SCHEDULER_NAME: scheduler-b
+    command: ["python", "-m", "task_scheduler.leader"]
+    depends_on: *scheduler-dependencies
+    healthcheck: *scheduler-health
+
+  task-worker-a:
+    <<: *app
+    environment:
+      APP_ENV: local
+      ZK_HOSTS: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+      TASK_API_URL: http://task-api:8085
+      WORKER_NAME: demo-worker-a
+    command: ["python", "-m", "task_scheduler.worker"]
+    depends_on:
+      task-api:
+        condition: service_healthy
+    healthcheck: &task-worker-health
+      test: ["CMD", "python", "-m", "local.healthcheck", "task-worker"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  task-worker-b:
+    <<: *app
+    environment:
+      APP_ENV: local
+      ZK_HOSTS: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+      TASK_API_URL: http://task-api:8085
+      WORKER_NAME: demo-worker-b
+    command: ["python", "-m", "task_scheduler.worker"]
+    depends_on:
+      task-api:
+        condition: service_healthy
+    healthcheck: *task-worker-health
+
+  payment-init:
+    <<: *app
+    environment: *order-db-env
+    command: ["python", "-m", "payment_service.schema"]
+    depends_on:
+      order-init:
+        condition: service_completed_successfully
+
+  payment-service:
+    <<: *app
+    environment: *scheduler-env
+    command: ["python", "-m", "payment_service.api"]
+    ports:
+      - "127.0.0.1:${LOCAL_PAYMENT_PORT:-8086}:8086"
+    depends_on: *scheduler-dependencies
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "payment"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  payment-worker-a:
+    <<: *app
+    environment: &payment-worker-env
+      APP_ENV: local
+      ZK_HOSTS: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+      TASK_API_URL: http://task-api:8085
+      PAYMENT_API_URL: http://payment-service:8086
+      WORKER_NAME: payment-worker-a
+    command: ["python", "-m", "payment_service.worker"]
+    depends_on: &payment-worker-dependencies
+      payment-service:
+        condition: service_healthy
+      task-api:
+        condition: service_healthy
+    healthcheck: &payment-worker-health
+      test: ["CMD", "python", "-m", "local.healthcheck", "payment-worker"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  payment-worker-b:
+    <<: *app
+    environment:
+      <<: *payment-worker-env
+      WORKER_NAME: payment-worker-b
+    command: ["python", "-m", "payment_service.worker"]
+    depends_on: *payment-worker-dependencies
+    healthcheck: *payment-worker-health
+
+
+  kitchen-init:
+    <<: *app
+    environment: *order-db-env
+    command: ["python", "-m", "kitchen_workflow.schema"]
+    depends_on:
+      payment-init:
+        condition: service_completed_successfully
+
+  kitchen-api:
+    <<: *app
+    environment: *scheduler-env
+    command: ["python", "-m", "kitchen_workflow.api"]
+    ports:
+      - "127.0.0.1:${LOCAL_KITCHEN_PORT:-8087}:8087"
+    depends_on: *scheduler-dependencies
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "kitchen-api"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  kitchen-sync:
+    <<: *app
+    environment:
+      <<: *order-db-env
+      PROJECT_ID: demo-food-delivery
+      FIRESTORE_EMULATOR_HOST: firestore:8080
+    command: ["python", "-m", "kitchen_workflow.sync"]
+    depends_on:
+      kitchen-init:
+        condition: service_completed_successfully
+      firestore:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "kitchen-sync"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  kitchen-stage-worker-a:
+    <<: *app
+    environment: &kitchen-worker-env
+      APP_ENV: local
+      ZK_HOSTS: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+      TASK_API_URL: http://task-api:8085
+      KITCHEN_API_URL: http://kitchen-api:8087
+      WORKER_NAME: kitchen-stage-worker-a
+    command: ["python", "-m", "kitchen_workflow.worker"]
+    depends_on: &kitchen-worker-dependencies
+      kitchen-api:
+        condition: service_healthy
+      task-api:
+        condition: service_healthy
+    healthcheck: &kitchen-worker-health
+      test: ["CMD", "python", "-m", "local.healthcheck", "kitchen-stage-worker"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  kitchen-stage-worker-b:
+    <<: *app
+    environment:
+      <<: *kitchen-worker-env
+      WORKER_NAME: kitchen-stage-worker-b
+    command: ["python", "-m", "kitchen_workflow.worker"]
+    depends_on: *kitchen-worker-dependencies
+    healthcheck: *kitchen-worker-health
+
+
+  delivery-init:
+    <<: *app
+    environment: *order-db-env
+    command: ["python", "-m", "delivery_assignment_service.schema"]
+    depends_on:
+      kitchen-init:
+        condition: service_completed_successfully
+
+  delivery-outbox:
+    <<: *app
+    environment:
+      <<: *order-db-env
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    command: ["python", "-m", "delivery_assignment_service.outbox"]
+    depends_on:
+      delivery-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "delivery-outbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  delivery-worker-a:
+    <<: *app
+    environment: &delivery-worker-env
+      APP_ENV: local
+      ZK_HOSTS: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+      TASK_API_URL: http://task-api:8085
+      DELIVERY_API_URL: http://delivery-service:8082
+      WORKER_NAME: delivery-worker-a
+    command: ["python", "-m", "delivery_assignment_service.worker"]
+    depends_on: &delivery-worker-dependencies
+      delivery-service:
+        condition: service_healthy
+      task-api:
+        condition: service_healthy
+    healthcheck: &delivery-worker-health
+      test: ["CMD", "python", "-m", "local.healthcheck", "delivery-worker"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  delivery-worker-b:
+    <<: *app
+    environment:
+      <<: *delivery-worker-env
+      WORKER_NAME: delivery-worker-b
+    command: ["python", "-m", "delivery_assignment_service.worker"]
+    depends_on: *delivery-worker-dependencies
+    healthcheck: *delivery-worker-health
+
+
+  notification-init:
+    <<: *app
+    environment: *order-db-env
+    command: ["python", "-m", "notification_service.schema"]
+    depends_on:
+      delivery-init:
+        condition: service_completed_successfully
+
+  notification-api:
+    <<: *app
+    environment: *scheduler-env
+    command: ["python", "-m", "notification_service.api"]
+    ports:
+      - "127.0.0.1:${LOCAL_NOTIFICATION_PORT:-8088}:8088"
+    depends_on: *scheduler-dependencies
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "notification"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  notification-consumer:
+    <<: *app
+    environment:
+      <<: *order-db-env
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_SECURITY_PROTOCOL: PLAINTEXT
+    command: ["python", "-m", "notification_service.consumer"]
+    depends_on:
+      notification-init:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "notification-consumer"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  notification-reconcile:
+    <<: *app
+    environment: *order-db-env
+    command: ["python", "-m", "notification_service.reconcile"]
+    depends_on:
+      task-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "notification-reconcile"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  notification-worker-a:
+    <<: *app
+    environment: &notification-worker-env
+      APP_ENV: local
+      ZK_HOSTS: zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181
+      TASK_API_URL: http://task-api:8085
+      NOTIFICATION_API_URL: http://notification-api:8088
+      WORKER_NAME: notification-worker-a
+    command: ["python", "-m", "notification_service.worker"]
+    depends_on: &notification-worker-dependencies
+      notification-api:
+        condition: service_healthy
+      task-api:
+        condition: service_healthy
+    healthcheck: &notification-worker-health
+      test: ["CMD", "python", "-m", "local.healthcheck", "notification-worker"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  notification-worker-b:
+    <<: *app
+    environment:
+      <<: *notification-worker-env
+      WORKER_NAME: notification-worker-b
+    command: ["python", "-m", "notification_service.worker"]
+    depends_on: *notification-worker-dependencies
+    healthcheck: *notification-worker-health
+
+
+  customer-service:
+    <<: *app
+    command: ["python", "-m", "customer_service.customer_service"]
+    environment:
+      APP_ENV: local
+      DB_USER: customer_service_user
+      DB_PASSWORD: ${LOCAL_DB_PASSWORD:-local-db-only}
+      DB_PRIVATE_IP: mysql
+      DB_PORT: "3306"
+      DB_NAME: orders_db
+    ports:
+      - "127.0.0.1:${LOCAL_CUSTOMER_PORT:-8083}:8083"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "customer"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  kitchen-worker:
+    <<: *app
+    command: ["python", "-m", "order_service.event_consumer"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "kitchen"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
+  restaurant-service:
+    <<: *app
+    environment:
+      APP_ENV: local
+      PROJECT_ID: demo-food-delivery
+      FIRESTORE_EMULATOR_HOST: firestore:8080
+    command: ["python", "-m", "restaurant_service.restaurant_service"]
+    ports:
+      - "127.0.0.1:${LOCAL_RESTAURANT_PORT:-50051}:50051"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "restaurant"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  restaurant-api:
+    <<: *app
+    command: ["python", "-m", "restaurant_service.http_api"]
+    environment:
+      APP_ENV: local
+      RESTAURANT_GRPC_TARGET: restaurant-service:50051
+    ports:
+      - "127.0.0.1:${LOCAL_RESTAURANT_HTTP_PORT:-8084}:8084"
+    depends_on:
+      restaurant-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "restaurant-http"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  delivery-service:
+    <<: *app
+    environment: *scheduler-env
+    command: ["python", "-m", "delivery_assignment_service.das"]
+    ports:
+      - "127.0.0.1:${LOCAL_DELIVERY_PORT:-8082}:8082"
+    depends_on: *scheduler-dependencies
+    healthcheck:
+      test: ["CMD", "python", "-m", "local.healthcheck", "delivery"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  smoke-test:
+    <<: *app
+    profiles: [tools]
+    command: ["python", "-m", "local.smoke_test"]
+    depends_on:
+      notification-worker-a:
+        condition: service_healthy
+      notification-worker-b:
+        condition: service_healthy
+      notification-consumer:
+        condition: service_healthy
+      notification-reconcile:
+        condition: service_healthy
+      delivery-worker-a:
+        condition: service_healthy
+      delivery-worker-b:
+        condition: service_healthy
+      delivery-outbox:
+        condition: service_healthy
+      kitchen-stage-worker-a:
+        condition: service_healthy
+      kitchen-stage-worker-b:
+        condition: service_healthy
+      kitchen-sync:
+        condition: service_healthy
+      payment-worker-a:
+        condition: service_healthy
+      payment-worker-b:
+        condition: service_healthy
+      task-worker-a:
+        condition: service_healthy
+      task-worker-b:
+        condition: service_healthy
+      task-scheduler-a:
+        condition: service_healthy
+      task-scheduler-b:
+        condition: service_healthy
+      order-outbox:
+        condition: service_healthy
+      restaurant-api:
+        condition: service_healthy
+      customer-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      restaurant-service:
+        condition: service_healthy
+      kitchen-worker:
+        condition: service_healthy
+      delivery-service:
+        condition: service_healthy
+
+  customer-smoke-test:
+    <<: *app
+    profiles: [tools]
+    command: ["python", "-m", "local.customer_smoke_test"]
+    depends_on:
+      customer-service:
+        condition: service_healthy
+
+  restaurant-smoke-test:
+    <<: *app
+    profiles: [tools]
+    command: ["python", "-m", "local.restaurant_smoke_test"]
+    depends_on:
+      restaurant-api:
+        condition: service_healthy
+
+  order-smoke-test:
+    <<: *app
+    profiles: [tools]
+    command: ["python", "-m", "local.order_smoke_test"]
+    depends_on:
+      delivery-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      order-outbox:
+        condition: service_healthy
+      restaurant-api:
+        condition: service_healthy
+      kitchen-worker:
+        condition: service_healthy
+
+  scheduler-smoke-test:
+    <<: *app
+    profiles: [tools]
+    command: ["python", "-m", "local.scheduler_smoke_test"]
+    depends_on:
+      task-worker-a:
+        condition: service_healthy
+      task-worker-b:
+        condition: service_healthy
+      task-scheduler-a:
+        condition: service_healthy
+      task-scheduler-b:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      restaurant-api:
+        condition: service_healthy
+
+  payment-smoke-test:
+    <<: *app
+    profiles: [tools]
+    command: ["python", "-m", "local.payment_smoke_test"]
+    depends_on:
+      payment-worker-a:
+        condition: service_healthy
+      payment-worker-b:
+        condition: service_healthy
+      task-scheduler-a:
+        condition: service_healthy
+      task-scheduler-b:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      restaurant-api:
+        condition: service_healthy
+      order-outbox:
+        condition: service_healthy
+      kitchen-worker:
+        condition: service_healthy
+
+  kitchen-smoke-test:
+    <<: *app
+    profiles: [tools]
+    command: ["python", "-m", "local.kitchen_smoke_test"]
+    depends_on:
+      kitchen-stage-worker-a:
+        condition: service_healthy
+      kitchen-stage-worker-b:
+        condition: service_healthy
+      kitchen-sync:
+        condition: service_healthy
+      payment-worker-a:
+        condition: service_healthy
+      payment-worker-b:
+        condition: service_healthy
+      task-scheduler-a:
+        condition: service_healthy
+      task-scheduler-b:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      restaurant-api:
+        condition: service_healthy
+      kitchen-worker:
+        condition: service_healthy
+      order-outbox:
+        condition: service_healthy
+
+  delivery-smoke-test:
+    <<: *app
+    profiles: [tools]
+    command: ["python", "-m", "local.delivery_smoke_test"]
+    depends_on:
+      delivery-worker-a:
+        condition: service_healthy
+      delivery-worker-b:
+        condition: service_healthy
+      delivery-outbox:
+        condition: service_healthy
+      kitchen-stage-worker-a:
+        condition: service_healthy
+      kitchen-stage-worker-b:
+        condition: service_healthy
+      kitchen-sync:
+        condition: service_healthy
+      payment-worker-a:
+        condition: service_healthy
+      payment-worker-b:
+        condition: service_healthy
+      task-scheduler-a:
+        condition: service_healthy
+      task-scheduler-b:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      restaurant-api:
+        condition: service_healthy
+      order-outbox:
+        condition: service_healthy
+
+  notification-smoke-test:
+    <<: *app
+    profiles: [tools]
+    command: ["python", "-m", "local.notification_smoke_test"]
+    depends_on:
+      notification-worker-a:
+        condition: service_healthy
+      notification-worker-b:
+        condition: service_healthy
+      notification-consumer:
+        condition: service_healthy
+      notification-reconcile:
+        condition: service_healthy
+      delivery-worker-a:
+        condition: service_healthy
+      delivery-worker-b:
+        condition: service_healthy
+      delivery-outbox:
+        condition: service_healthy
+      kitchen-stage-worker-a:
+        condition: service_healthy
+      kitchen-stage-worker-b:
+        condition: service_healthy
+      kitchen-sync:
+        condition: service_healthy
+      payment-worker-a:
+        condition: service_healthy
+      payment-worker-b:
+        condition: service_healthy
+      task-scheduler-a:
+        condition: service_healthy
+      task-scheduler-b:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      restaurant-api:
+        condition: service_healthy
+      order-outbox:
+        condition: service_healthy
+
+  web-smoke-test:
+    <<: *app
+    profiles: [tools]
+    environment:
+      APP_ENV: local
+    command: ["python", "-m", "local.web_smoke_test"]
+    depends_on:
+      web-ui:
+        condition: service_healthy
+      notification-worker-a:
+        condition: service_healthy
+      notification-worker-b:
+        condition: service_healthy
+      notification-consumer:
+        condition: service_healthy
+      notification-reconcile:
+        condition: service_healthy
+      delivery-worker-a:
+        condition: service_healthy
+      delivery-worker-b:
+        condition: service_healthy
+      delivery-outbox:
+        condition: service_healthy
+      kitchen-stage-worker-a:
+        condition: service_healthy
+      kitchen-stage-worker-b:
+        condition: service_healthy
+      kitchen-sync:
+        condition: service_healthy
+      payment-worker-a:
+        condition: service_healthy
+      payment-worker-b:
+        condition: service_healthy
+      task-scheduler-a:
+        condition: service_healthy
+      task-scheduler-b:
+        condition: service_healthy
+      kitchen-worker:
+        condition: service_healthy
+      order-outbox:
+        condition: service_healthy
+
+  web-ui:
+    <<: *app
+    environment:
+      APP_ENV: local
+      WEB_UI_DATA: /var/lib/web-ui/state.sqlite3
+    command: ["python", "-m", "web_ui.app"]
+    ports:
+      - "127.0.0.1:${LOCAL_WEB_PORT:-3000}:3000"
+    volumes:
+      - web-ui-data:/var/lib/web-ui
+    depends_on:
+      customer-service:
+        condition: service_healthy
+      restaurant-api:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+      kitchen-api:
+        condition: service_healthy
+      delivery-service:
+        condition: service_healthy
+      notification-api:
+        condition: service_healthy
+      task-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json; from urllib.request import urlopen; assert json.load(urlopen('http://127.0.0.1:3000/health', timeout=3))['status']=='healthy'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  web-ui-data:
+  mysql-data:
+  kafka-data:
+  zk-1-data:
+  zk-1-log:
+  zk-2-data:
+  zk-2-log:
+  zk-3-data:
+  zk-3-log:

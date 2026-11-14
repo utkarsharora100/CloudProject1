@@ -1,0 +1,65 @@
+{{- if .Values.zookeeper.enabled }}
+apiVersion: v1
+kind: Service
+metadata: {name: zookeeper, labels: {part-of: food}}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector: {app: zookeeper}
+  ports: [{name: client, port: 2181}, {name: peer, port: 2888}, {name: election, port: 3888}]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: zookeeper, annotations: {argocd.argoproj.io/sync-wave: "0"}}
+spec:
+  serviceName: zookeeper
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector: {matchLabels: {app: zookeeper}}
+  template:
+    metadata: {labels: {app: zookeeper, part-of: food}}
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext: {fsGroup: 1000}
+      containers:
+        - name: zookeeper
+          image: {{ .Values.zookeeper.image | quote }}
+          command: ["sh","-ec"]
+          args: ['export ZOO_MY_ID=$(expr "$POD_INDEX" + 1); exec /docker-entrypoint.sh zkServer.sh start-foreground']
+          env:
+            - name: POD_INDEX
+              valueFrom: {fieldRef: {fieldPath: "metadata.labels['apps.kubernetes.io/pod-index']"}}
+            - {name: ZOO_SERVERS, value: "server.1=zookeeper-0.zookeeper:2888:3888;2181 server.2=zookeeper-1.zookeeper:2888:3888;2181 server.3=zookeeper-2.zookeeper:2888:3888;2181"}
+            - {name: ZOO_4LW_COMMANDS_WHITELIST, value: ruok,mntr,srvr}
+            - {name: JVMFLAGS, value: "-Xms128m -Xmx256m"}
+          ports: [{name: client, containerPort: 2181}, {name: peer, containerPort: 2888}, {name: election, containerPort: 3888}]
+          resources: {requests: {cpu: 100m, memory: 384Mi}, limits: {cpu: "1", memory: 768Mi}}
+          startupProbe: {tcpSocket: {port: client}, failureThreshold: 60, periodSeconds: 3}
+          readinessProbe:
+            exec: {command: ["sh","-ec","zkServer.sh status >/dev/null"]}
+            periodSeconds: 10
+          volumeMounts: [{name: data, mountPath: /data}, {name: data, mountPath: /datalog, subPath: datalog}]
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm: {topologyKey: kubernetes.io/hostname, labelSelector: {matchLabels: {app: zookeeper}}}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: {{ .Values.zookeeper.storage }}}}}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: zookeeper}
+spec: {minAvailable: 2, selector: {matchLabels: {app: zookeeper}}}
+---
+{{- range $i := until 3 }}
+apiVersion: v1
+kind: Service
+metadata: {name: zookeeper-{{ add1 $i }}}
+spec:
+  selector: {statefulset.kubernetes.io/pod-name: zookeeper-{{ $i }}}
+  ports: [{name: client, port: 2181, targetPort: 2181}]
+---
+{{- end }}
+{{- end }}

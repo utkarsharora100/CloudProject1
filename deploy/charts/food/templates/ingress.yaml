@@ -1,0 +1,38 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata: {name: food-web}
+spec:
+  domains: [{{ .Values.host | quote }}]
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata: {name: food-web}
+spec:
+  redirectToHttps: {enabled: true}
+---
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata: {name: food-web}
+spec:
+  healthCheck: {type: HTTP, requestPath: /health, port: 3000}
+  timeoutSec: 60
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: food-web
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: {{ .Values.ingress.ipName | quote }}
+    networking.gke.io/managed-certificates: food-web
+    networking.gke.io/v1beta1.FrontendConfig: food-web
+spec:
+  rules:
+    - host: {{ .Values.host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend: {service: {name: web-ui, port: {number: 3000}}}
+{{- end }}

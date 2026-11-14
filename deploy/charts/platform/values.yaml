@@ -1,0 +1,40 @@
+external-secrets:
+  installCRDs: true
+  resources:
+    requests: {cpu: 50m, memory: 96Mi}
+kube-prometheus-stack:
+  namespaceOverride: monitoring
+  fullnameOverride: monitoring
+  grafana:
+    namespaceOverride: monitoring
+    enabled: true
+    grafana.ini:
+      auth: {disable_login_form: true}
+      auth.anonymous: {enabled: true, org_role: Viewer}
+      security: {disable_initial_admin_creation: true}
+    admin:
+      existingSecret: grafana-admin
+      userKey: admin-user
+      passwordKey: admin-password
+    sidecar:
+      dashboards: {enabled: true, searchNamespace: ALL}
+    service: {type: ClusterIP}
+    persistence: {enabled: true, size: 2Gi}
+  prometheus:
+    prometheusSpec:
+      retention: 24h
+      serviceMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorNamespaceSelector: {}
+      resources:
+        requests: {cpu: 200m, memory: 512Mi}
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            accessModes: [ReadWriteOnce]
+            resources: {requests: {storage: 5Gi}}
+  alertmanager: {enabled: false}
+
+  kube-state-metrics:
+    namespaceOverride: monitoring
+  prometheus-node-exporter:
+    namespaceOverride: monitoring

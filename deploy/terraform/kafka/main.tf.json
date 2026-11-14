@@ -1,0 +1,53 @@
+{
+  "terraform": {
+    "required_version": ">=1.6.0",
+    "required_providers": {
+      "confluent": {
+        "source": "confluentinc/confluent",
+        "version": "2.50.0"
+      }
+    },
+    "backend": {
+      "gcs": {}
+    }
+  },
+  "variable": {
+    "cluster_id": {
+      "type": "string"
+    },
+    "rest_endpoint": {
+      "type": "string"
+    },
+    "kafka_api_key": {
+      "type": "string",
+      "sensitive": true
+    },
+    "kafka_api_secret": {
+      "type": "string",
+      "sensitive": true
+    }
+  },
+  "resource": {
+    "confluent_kafka_topic": {
+      "application": {
+        "for_each": "${toset([\"orders\",\"kitchen_status\",\"delivery_assignments\",\"restaurant_analytics_results\"])}",
+        "topic_name": "${each.value}",
+        "partitions_count": 3,
+        "config": {
+          "retention.ms": "604800000"
+        },
+        "lifecycle": {
+          "prevent_destroy": true
+        }
+      }
+    }
+  },
+  "provider": {
+    "confluent": {
+      "kafka_id": "${var.cluster_id}",
+      "kafka_rest_endpoint": "${var.rest_endpoint}",
+      "kafka_api_key": "${var.kafka_api_key}",
+      "kafka_api_secret": "${var.kafka_api_secret}"
+    }
+  }
+}

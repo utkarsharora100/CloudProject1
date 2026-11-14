@@ -1,0 +1,33 @@
+{{- if .Values.loadTest.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: food-load-script}
+data:
+  sustained.js: |
+{{ .Files.Get "load/sustained.js" | indent 4 }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: food-load-{{ required "Set a fresh loadTest.runId" .Values.loadTest.runId }}
+  annotations: {argocd.argoproj.io/sync-wave: "3"}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1200
+  template:
+    metadata: {labels: {part-of: food, app: food-load}}
+    spec:
+      serviceAccountName: food-worker
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:2.4.0
+          args: ["run","--quiet","/scripts/sustained.js"]
+          env:
+            {{- range $key,$value := .Values.loadTest.env }}
+            - {name: {{ $key }}, value: {{ $value | quote }}}
+            {{- end }}
+          volumeMounts: [{name: script, mountPath: /scripts, readOnly: true}]
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "2", memory: 512Mi}}
+      volumes: [{name: script, configMap: {name: food-load-script}}]
+{{- end }}

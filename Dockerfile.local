@@ -1,0 +1,23 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app
+COPY common/ ./common/
+COPY deploy/*.py ./deploy/
+COPY customer_service/*.py ./customer_service/
+COPY order_service/*.py ./order_service/
+COPY task_scheduler/*.py ./task_scheduler/
+COPY payment_service/*.py ./payment_service/
+COPY kitchen_workflow/*.py ./kitchen_workflow/
+COPY restaurant_service/*.py ./restaurant_service/
+COPY restaurant_service/restaurant.proto ./restaurant_service/
+RUN python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. restaurant_service/restaurant.proto
+COPY delivery_assignment_service/*.py ./delivery_assignment_service/
+COPY notification_service/*.py ./notification_service/
+COPY web_ui/*.py ./web_ui/
+COPY web_ui/templates/ ./web_ui/templates/
+COPY web_ui/static/ ./web_ui/static/
+COPY local/*.py ./local/
+ENTRYPOINT ["python", "-m", "deploy.process_runner"]
+CMD ["python", "-m", "order_service.event_producer"]

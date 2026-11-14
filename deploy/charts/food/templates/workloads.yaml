@@ -1,0 +1,153 @@
+{{- range $name,$w := .Values.workloads }}
+{{- $sa := "worker" }}
+{{- if $w.sql }}{{ $sa = "sql" }}{{ end }}
+{{- if $w.firestore }}{{ $sa = "firestore" }}{{ end }}
+{{- if and $w.sql $w.firestore }}{{ $sa = "combined" }}{{ end }}
+{{- if $w.notification }}{{ $sa = "notification" }}{{ end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {app: {{ $name }}, part-of: food}
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  {{- if not $w.hpa }}
+  replicas: {{ $w.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 3
+  {{- if $w.web }}
+  strategy: {type: Recreate}
+  {{- end }}
+  selector:
+    matchLabels: {app: {{ $name }}}
+  template:
+    metadata:
+      labels: {app: {{ $name }}, part-of: food}
+      annotations:
+        checksum/config: {{ $.Values.env | toJson | sha256sum }}
+    spec:
+      serviceAccountName: food-{{ $sa }}
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      {{- if and $w.sql (eq $.Values.profile "cloud") }}
+      initContainers:
+        - name: cloud-sql-proxy
+          image: {{ $.Values.sqlProxyImage | quote }}
+          restartPolicy: Always
+          args: ["--private-ip","--structured-logs","--port=3306",{{ $.Values.cloudSqlConnection | quote }}]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: ["ALL"]}}
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          startupProbe:
+            tcpSocket: {port: 3306}
+            periodSeconds: 2
+            failureThreshold: 60
+      {{- end }}
+      containers:
+        - name: application
+          image: {{ $.Values.image | quote }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          {{- if $w.factory }}
+          args: ["gunicorn","--bind","0.0.0.0:{{ $w.port }}","--workers","1","--threads","4","--timeout","45","--error-logfile","-","deploy.application:create()"]
+          {{- else }}
+          args: ["python","-m",{{ $w.module | quote }}]
+          {{- end }}
+          envFrom:
+            - configMapRef: {name: food-config}
+            {{- if $w.sql }}
+            - secretRef: {name: food-db}
+            {{- end }}
+            {{- if and $w.kafka (eq $.Values.profile "cloud") }}
+            - secretRef: {name: food-kafka}
+            {{- end }}
+            {{- if and $w.web (eq $.Values.profile "cloud") }}
+            - secretRef: {name: food-web}
+            {{- end }}
+          env:
+            - name: SERVICE_NAME
+              value: {{ default $name $w.factory | quote }}
+            - name: WORKER_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: SCHEDULER_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+          {{- if $w.port }}
+          ports: [{name: http, containerPort: {{ $w.port }}}]
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          resources: {{ $.Values.resources | toJson }}
+          {{- if $w.factory }}
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            failureThreshold: 60
+            timeoutSeconds: 5
+            periodSeconds: 3
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            timeoutSeconds: 8
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: {port: http}
+            failureThreshold: 6
+            periodSeconds: 10
+          {{- else if $w.probe }}
+          readinessProbe:
+            exec: {command: ["python","-m","local.healthcheck",{{ $w.probe | quote }}]}
+            initialDelaySeconds: 20
+            timeoutSeconds: 8
+            periodSeconds: 15
+          {{- else if $w.analytics }}
+          readinessProbe:
+            exec:
+              command: ["python","-c","import json,time;from pathlib import Path;d=json.loads(Path('/tmp/restaurant-analytics-results-heartbeat.json').read_text());assert time.time()-d['at']<25"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          {{- end }}
+          {{- if $w.web }}
+          volumeMounts: [{name: web-data, mountPath: /data}]
+          {{- end }}
+      {{- if $w.web }}
+      volumes: [{name: web-data, persistentVolumeClaim: {claimName: web-data}}]
+      {{- end }}
+---
+{{- if $w.port }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {app: {{ $name }}, part-of: food, metrics: {{ ternary "enabled" "disabled" (and (hasKey $w "factory") (not $w.web)) }}}
+  {{- if and $w.web $.Values.ingress.enabled }}
+  annotations:
+    cloud.google.com/neg: '{"ingress":true}'
+    cloud.google.com/backend-config: '{"default":"food-web"}'
+  {{- end }}
+spec:
+  selector: {app: {{ $name }}}
+  ports: [{name: http, port: {{ $w.port }}, targetPort: http}]
+---
+{{- end }}
+{{- if $w.hpa }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: {name: {{ $name }}, annotations: {argocd.argoproj.io/sync-wave: "2"}}
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ $name }}}
+  minReplicas: {{ $.Values.hpa.min }}
+  maxReplicas: {{ $.Values.hpa.max }}
+  metrics:
+    - type: Resource
+      resource: {name: cpu, target: {type: Utilization, averageUtilization: {{ $.Values.hpa.cpu }}}}
+    - type: Resource
+      resource: {name: memory, target: {type: Utilization, averageUtilization: {{ $.Values.hpa.memory }}}}
+  behavior:
+    scaleDown: {stabilizationWindowSeconds: {{ default 180 $.Values.hpa.scaleDownSeconds }}}
+    scaleUp: {stabilizationWindowSeconds: 30}
+---
+{{- end }}
+{{- end }}

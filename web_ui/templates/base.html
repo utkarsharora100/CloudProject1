@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="csrf-token" content="{{ csrf }}"><meta name="description" content="Supper — a thoughtful local food delivery simulation, from kitchen to doorstep.">
+<title>{{ title }} · Supper</title><link rel="icon" href="/static/mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/styles.css"><script type="module" src="/static/app.js"></script></head>
+<body data-page="{{ page|default('error') }}" data-role="{{ role|default('customer') }}" data-record="{{ record_id|default('') }}">
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="app-shell">
+<aside class="sidebar" id="sidebar" aria-label="Main navigation">
+<button class="icon-button navigation-close" id="navigation-close" aria-label="Close navigation">×</button>
+<a class="wordmark" href="/">supper<span>.</span><svg aria-hidden="true" viewBox="0 0 30 30"><path d="M8 3v9m5-9v9m5-9v9M8 8h10m-5 4v15M24 3v24m0-24c-7 4-7 13 0 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></a>
+<p class="side-label">YOUR WORKSPACES</p>
+<nav class="role-nav" aria-label="Workspace">
+{% for key,url,label,icon in [('customer','/','Customer','bag'),('kitchen','/kitchen','Kitchen','chef'),('courier','/courier','Courier','bike'),('operations','/operations','Operations','chart')] %}
+<a href="{{ url }}" class="role-link {{ 'active' if role==key else '' }}" {{ 'aria-current=page' if role==key else '' }}><svg aria-hidden="true"><use href="/static/icons.svg#{{ icon }}"></use></svg>{{ label }}<span class="nav-arrow">↗</span></a>
+{% endfor %}</nav>
+<div class="side-rule"></div><p class="side-label">{{ 'DINING ROOM' if role=='customer' else ('KITCHEN DESK' if role=='kitchen' else ('ON THE ROAD' if role=='courier' else 'CONTROL ROOM')) }}</p>
+<nav class="sub-nav" aria-label="Pages">
+{% if role=='customer' %}
+<a class="{{ 'selected' if page in ['discover','menu'] else '' }}" href="/">Discover kitchens</a>
+<a class="{{ 'selected' if page in ['orders','tracking'] else '' }}" href="/orders">Your orders</a>
+<a class="{{ 'selected' if page=='notifications' else '' }}" href="/notifications">Inbox <span id="side-unread"></span></a>
+<a class="{{ 'selected' if page=='account' else '' }}" href="/account">Profile & addresses</a>
+{% elif role=='kitchen' %}
+<a class="{{ 'selected' if page=='kitchen' else '' }}" href="/kitchen">Order board</a><a class="{{ 'selected' if page=='menu-editor' else '' }}" href="/kitchen/menu">Menu & availability</a>
+{% elif role=='courier' %}
+<a class="{{ 'selected' if page=='courier' else '' }}" href="/courier">My shift</a><a href="/notifications?recipient=courier">Courier inbox</a><a href="/operations/fleet">Fleet capacity</a>
+{% else %}
+<a class="{{ 'selected' if page=='operations' else '' }}" href="/operations">Overview & insights</a><a class="{{ 'selected' if page=='stream' else '' }}" href="/operations/stream">Kitchen pulse · Flink</a><a class="{{ 'selected' if page=='fleet' else '' }}" href="/operations/fleet">Courier capacity</a><a class="{{ 'selected' if page=='services' else '' }}" href="/operations/services">Services & workers</a>
+{% endif %}</nav>
+<div class="side-bottom"><div class="paper-note"><span class="small-caps">A SMALL NOTE</span><p>Fictional people.<br>Real progress.</p><span>Every stage is confirmed<br>by the live local services.</span></div>
+<button class="workspace-button" data-open-workspace><span class="avatar">S</span><span><strong id="workspace-name">Choose a workspace</strong><small>Local demonstration</small></span><span>⌄</span></button></div>
+</aside>
+<button class="navigation-scrim" id="navigation-scrim" aria-label="Close navigation" hidden></button>
+<div class="main-shell"><header class="topbar"><button class="icon-button mobile-menu" id="menu-toggle" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false"><svg><use href="/static/icons.svg#menu"></use></svg></button>
+<div class="breadcrumb"><span>{{ role|default('customer')|capitalize }}</span><span>/</span><strong>{{ title }}</strong></div>
+<div class="top-actions"><span class="live-label"><i></i>Local simulation</span><a class="icon-button" href="{{ '/notifications?recipient=courier' if role=='courier' else '/notifications' }}" aria-label="Notifications"><svg><use href="/static/icons.svg#bell"></use></svg><span id="notification-dot"></span></a><button class="avatar small" data-open-workspace aria-label="Choose demo workspace">D</button></div></header>
+<main id="main" tabindex="-1"><div id="connection-banner" class="connection-banner" role="status" hidden></div>
+{% block content %}{% endblock %}</main>
+<footer class="site-footer"><span>Thoughtfully delivered.</span><span>Live local simulation <span aria-hidden="true">·</span> No real payments or messages</span><span id="updated-at">Waiting for live data</span></footer>
+</div></div>
+<dialog id="workspace-dialog" class="modal"><div class="modal-header"><span class="eyebrow">A FRESH START</span><button class="icon-button" data-close-dialog aria-label="Close workspace dialog">×</button></div><h2>Your demo workspace.</h2><p>A fictional diner, a kitchen with four menu items, and two offline couriers. You decide when each order progresses.</p><div id="workspace-list" class="workspace-list"></div><button class="button primary wide" id="create-workspace">Create a new demo workspace <span>↗</span></button><p class="fineprint">This adds demo records to your local services. Existing records are kept. Couriers start offline; no order is created automatically.</p></dialog>
+<dialog id="confirm-dialog" class="modal compact"><div class="modal-header"><span class="eyebrow">PLEASE CONFIRM</span><button class="icon-button" data-close-dialog aria-label="Close">×</button></div><h2 id="confirm-title">Confirm action</h2><p id="confirm-copy"></p><div class="button-row"><button class="button" id="confirm-cancel">Keep it</button><button class="button primary" id="confirm-submit">Confirm</button></div></dialog>
+<div id="toast-region" class="toast-region" aria-live="polite"></div>
+</body></html>

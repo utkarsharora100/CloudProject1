@@ -1,0 +1,18 @@
+{
+  "project_id": "replace-project-id",
+  "region": "asia-south1",
+  "zone": "asia-south1-a",
+  "prefix": "food",
+  "public_host": "food.example.edu",
+  "git_repository": "https://github.com/utkarsharora100/CloudProject1.git",
+  "git_revision": "dev",
+  "image_tag": "assignment-v1",
+  "kafka_bootstrap": "REPLACE.confluent.cloud:9092",
+  "kafka_cluster_id": "lkc-REPLACE",
+  "kafka_rest_endpoint": "https://REPLACE.confluent.cloud:443",
+  "dns_zone": "",
+  "admin_cidr": "203.0.113.10/32",
+  "create_firestore": true,
+  "state_bucket": "replace-project-id-food-tfstate",
+  "operator_user": "team-demo"
+}

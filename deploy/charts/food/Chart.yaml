@@ -1,0 +1,5 @@
+apiVersion: v2
+name: food
+version: 1.0.0
+appVersion: 'assignment-v1'
+description: Eight food-delivery services and Restaurant analytics projection

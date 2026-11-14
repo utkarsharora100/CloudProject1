@@ -1,0 +1,27 @@
+{{- if .Values.managedFlink.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: restaurant-analytics-launch
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 600
+  template:
+    metadata: {labels: {part-of: food, app: restaurant-analytics-launch}}
+    spec:
+      serviceAccountName: food-launcher
+      restartPolicy: Never
+      containers:
+        - name: submit
+          image: {{ .Values.image | quote }}
+          args: ["python","-m","deploy.dataproc_submit"]
+          envFrom: [{configMapRef: {name: food-config}}]
+          env:
+            {{- range $key,$value := .Values.managedFlink.env }}
+            - {name: {{ $key }}, value: {{ $value | quote }}}
+            {{- end }}
+          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: 500m, memory: 256Mi}}
+{{- end }}

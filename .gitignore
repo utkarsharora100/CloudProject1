@@ -1,0 +1,71 @@
+# Local environment and credential files
+.env
+.env.*
+!.env.example
+!.env.kafka.example
+!.env.local.example
+secret.txt
+secrets.txt
+secrets*.json
+*service-account*.json
+*credentials*.json
+*.pem
+*.key
+
+# Python environments and generated caches
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local Terraform data and potentially sensitive inputs
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfplan.*
+tfplan
+.terraform.tfstate.lock.info
+*.tfvars
+*.tfvars.json
+crash.log
+
+# Local protobuf compiler output
+/.local-build/
+
+!.env.assignment.example
+/deploy/config.team.json
+/deploy/terraform/**/.terraform/
+/deploy/terraform/**/backend.hcl
+
+# Keep local documentation out of this source-only Git update
+*.md
+*.markdown
+[Rr][Ee][Aa][Dd][Mm][Ee]
+# Local evidence, runtime records and private key containers
+/docs/evidence/
+*.log
+*.jsonl
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+*.har
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.zip
+# Generated build dependencies and downloaded tools
+node_modules/
+target/
+cloud-sql-proxy
+
+# Superseded deployment files remain local; use deploy/ for deployment
+/customer_service/gke.tf
+/customer_service/sql.tf
+/order_service/kafka.tf
+/restaurant_service/rst.tf
+/delivery_assignment_service/deployment.yaml

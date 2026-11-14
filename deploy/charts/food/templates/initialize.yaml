@@ -1,0 +1,32 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: food-initialize
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation,HookSucceeded
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 600
+  template:
+    metadata: {labels: {part-of: food, app: food-initialize}}
+    spec:
+      serviceAccountName: food-combined
+      restartPolicy: OnFailure
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+      {{- if eq .Values.profile "cloud" }}
+      initContainers:
+        - name: cloud-sql-proxy
+          image: {{ .Values.sqlProxyImage | quote }}
+          restartPolicy: Always
+          args: ["--private-ip","--structured-logs","--port=3306",{{ .Values.cloudSqlConnection | quote }}]
+          startupProbe: {tcpSocket: {port: 3306}, periodSeconds: 2, failureThreshold: 60}
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {cpu: 500m, memory: 256Mi}}
+      {{- end }}
+      containers:
+        - name: initialize
+          image: {{ .Values.image | quote }}
+          args: ["python","-m","deploy.initialize"]
+          envFrom: [{configMapRef: {name: food-config}}, {secretRef: {name: food-db}}]
+          resources: {requests: {cpu: 100m, memory: 192Mi}, limits: {cpu: "1", memory: 512Mi}}

@@ -1,33 +1,81 @@
 syntax = "proto3";
-
 package restaurant;
 
 service RestaurantService {
   rpc GetMenu (RestaurantRequest) returns (MenuResponse) {}
   rpc UpdateStatus (StatusRequest) returns (StatusResponse) {}
+  rpc ListRestaurants (ListRequest) returns (RestaurantList) {}
+  rpc CreateRestaurant (Restaurant) returns (Restaurant) {}
+  rpc GetRestaurant (RestaurantRequest) returns (Restaurant) {}
+  rpc UpdateRestaurant (UpdateRestaurantRequest) returns (Restaurant) {}
+  rpc UpsertMenuItem (MenuItemRequest) returns (MenuItemResult) {}
+  rpc RemoveMenuItem (RemoveMenuItemRequest) returns (StatusResponse) {}
 }
 
-message RestaurantRequest {
-  string restaurant_id = 1;
-}
-
+message RestaurantRequest { string restaurant_id = 1; }
 message MenuItem {
   string item_id = 1;
   string name = 2;
-  float price = 3;
+  float price = 3; // Legacy rupee representation; use price_minor for calculations.
+  optional int64 price_minor = 4;
+  optional bool available = 5;
+  string description = 6;
 }
-
 message MenuResponse {
   string restaurant_id = 1;
   bool is_open = 2;
   repeated MenuItem items = 3;
+  int32 estimated_prep_time_mins = 4;
+  string name = 5;
+  string currency = 6;
+  int64 version = 7;
 }
-
 message StatusRequest {
   string restaurant_id = 1;
   bool is_open = 2;
+  int64 expected_version = 3;
 }
-
 message StatusResponse {
   bool success = 1;
+  int64 version = 2;
+}
+message Restaurant {
+  string restaurant_id = 1;
+  string name = 2;
+  bool is_open = 3;
+  int32 estimated_prep_time_mins = 4;
+  string currency = 5;
+  string description = 6;
+  int64 version = 7;
+  string created_at = 8;
+  string updated_at = 9;
+}
+message ListRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+message RestaurantList {
+  repeated Restaurant restaurants = 1;
+  string next_page_token = 2;
+}
+message UpdateRestaurantRequest {
+  Restaurant restaurant = 1;
+  repeated string update_fields = 2;
+  int64 expected_version = 3;
+}
+message MenuItemRequest {
+  string restaurant_id = 1;
+  MenuItem item = 2;
+  int64 expected_version = 3;
+}
+message MenuItemResult {
+  string restaurant_id = 1;
+  MenuItem item = 2;
+  bool created = 3;
+  int64 version = 4;
+}
+message RemoveMenuItemRequest {
+  string restaurant_id = 1;
+  string item_id = 2;
+  int64 expected_version = 3;
 }

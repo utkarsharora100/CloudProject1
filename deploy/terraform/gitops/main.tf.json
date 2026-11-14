@@ -1,0 +1,75 @@
+{
+  "terraform": {
+    "required_version": ">=1.6.0",
+    "required_providers": {
+      "kubernetes": {
+        "source": "hashicorp/kubernetes",
+        "version": "2.38.0"
+      }
+    },
+    "backend": {
+      "gcs": {}
+    }
+  },
+  "variable": {
+    "kubeconfig_path": {
+      "type": "string"
+    },
+    "kube_context": {
+      "type": "string"
+    },
+    "repository": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string"
+    }
+  },
+  "provider": {
+    "kubernetes": {
+      "config_path": "${var.kubeconfig_path}",
+      "config_context": "${var.kube_context}"
+    }
+  },
+  "resource": {
+    "kubernetes_manifest": {
+      "root": {
+        "manifest": {
+          "apiVersion": "argoproj.io/v1alpha1",
+          "kind": "Application",
+          "metadata": {
+            "name": "food-root",
+            "namespace": "argocd",
+            "finalizers": [
+              "resources-finalizer.argocd.argoproj.io"
+            ]
+          },
+          "spec": {
+            "project": "default",
+            "source": {
+              "repoURL": "${var.repository}",
+              "targetRevision": "${var.revision}",
+              "path": "deploy/environments/team",
+              "directory": {
+                "include": "applications.yaml"
+              }
+            },
+            "destination": {
+              "server": "https://kubernetes.default.svc",
+              "namespace": "argocd"
+            },
+            "syncPolicy": {
+              "automated": {
+                "prune": true,
+                "selfHeal": true
+              },
+              "syncOptions": [
+                "CreateNamespace=true"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

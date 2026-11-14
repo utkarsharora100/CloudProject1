@@ -1,0 +1,344 @@
+{
+  "profile": "cloud",
+  "image": "REGION-docker.pkg.dev/PROJECT/food/app:REPLACE_IMMUTABLE_TAG",
+  "imagePullPolicy": "IfNotPresent",
+  "projectId": "replace-project-id",
+  "publicOrigin": "https://food.example.edu",
+  "host": "food.example.edu",
+  "namespace": "food",
+  "cloudSqlConnection": "replace-project-id:asia-south1:food-sql",
+  "sqlProxyImage": "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.18.3",
+  "serviceAccounts": {
+    "sql": "food-sql@replace-project-id.iam.gserviceaccount.com",
+    "firestore": "food-firestore@replace-project-id.iam.gserviceaccount.com",
+    "combined": "food-combined@replace-project-id.iam.gserviceaccount.com",
+    "notification": "food-notify@replace-project-id.iam.gserviceaccount.com",
+    "eso": "food-secrets@replace-project-id.iam.gserviceaccount.com",
+    "launcher": "food-launcher@replace-project-id.iam.gserviceaccount.com"
+  },
+  "env": {
+    "APP_ENV": "cloud",
+    "CLOUD_DEPLOYMENT_ACK": "assignment-private-network-v1",
+    "PROJECT_ID": "replace-project-id",
+    "DB_PRIVATE_IP": "127.0.0.1",
+    "DB_PORT": "3306",
+    "DB_USER": "food_app",
+    "DB_NAME": "food",
+    "KAFKA_BOOTSTRAP_SERVERS": "replace.confluent.cloud:9092",
+    "KAFKA_SECURITY_PROTOCOL": "SASL_SSL",
+    "ZK_HOSTS": "zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181",
+    "ZK_ALLOWED_HOSTS": "zookeeper-1:2181,zookeeper-2:2181,zookeeper-3:2181",
+    "CUSTOMER_API_URL": "http://customer-service:8083",
+    "RESTAURANT_GRPC_TARGET": "restaurant-service:50051",
+    "TASK_API_URL": "http://task-api:8085",
+    "PAYMENT_API_URL": "http://payment-service:8086",
+    "KITCHEN_API_URL": "http://kitchen-api:8087",
+    "DELIVERY_API_URL": "http://delivery-service:8082",
+    "NOTIFICATION_API_URL": "http://notification-api:8088",
+    "NOTIFICATION_TRANSPORT": "function",
+    "NOTIFICATION_RECEIPTS_BUCKET": "replace-project-id-food-receipts",
+    "NOTIFICATION_DISPATCH_TOPIC": "food-notification-dispatch",
+    "WEB_UI_DATA": "/data/web-ui.sqlite3"
+  },
+  "secrets": {
+    "enabled": true,
+    "db": "food-db-password",
+    "kafka": "food-kafka",
+    "web": "food-web-access",
+    "versions": {
+      "db": "1",
+      "kafka": "1",
+      "web": "1"
+    }
+  },
+  "workloads": {
+    "customer-service": {
+      "factory": "customer",
+      "port": 8083,
+      "sql": true,
+      "firestore": false,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": true,
+      "web": false,
+      "notification": false
+    },
+    "order-service": {
+      "factory": "order",
+      "port": 8081,
+      "sql": true,
+      "firestore": false,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": true,
+      "web": false,
+      "notification": false
+    },
+    "restaurant-api": {
+      "factory": "restaurant-api",
+      "port": 8084,
+      "sql": false,
+      "firestore": false,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": false,
+      "web": false,
+      "notification": false
+    },
+    "task-api": {
+      "factory": "task-api",
+      "port": 8085,
+      "sql": true,
+      "firestore": false,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": false,
+      "web": false,
+      "notification": false
+    },
+    "payment-service": {
+      "factory": "payment",
+      "port": 8086,
+      "sql": true,
+      "firestore": false,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": false,
+      "web": false,
+      "notification": false
+    },
+    "kitchen-api": {
+      "factory": "kitchen",
+      "port": 8087,
+      "sql": true,
+      "firestore": false,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": false,
+      "web": false,
+      "notification": false
+    },
+    "delivery-service": {
+      "factory": "delivery",
+      "port": 8082,
+      "sql": true,
+      "firestore": false,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": false,
+      "web": false,
+      "notification": false
+    },
+    "notification-api": {
+      "factory": "notification",
+      "port": 8088,
+      "sql": true,
+      "firestore": false,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": false,
+      "web": false,
+      "notification": true
+    },
+    "restaurant-analytics-api": {
+      "factory": "restaurant-analytics",
+      "port": 8091,
+      "sql": false,
+      "firestore": true,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": false,
+      "web": false,
+      "notification": false
+    },
+    "web-ui": {
+      "factory": "web",
+      "port": 3000,
+      "sql": false,
+      "firestore": false,
+      "kafka": false,
+      "replicas": 1,
+      "hpa": false,
+      "web": true,
+      "notification": false
+    },
+    "restaurant-service": {
+      "module": "restaurant_service.restaurant_service",
+      "probe": "restaurant",
+      "port": 50051,
+      "firestore": true,
+      "replicas": 1
+    },
+    "order-outbox": {
+      "module": "order_service.outbox",
+      "probe": "order-outbox",
+      "sql": true,
+      "kafka": true,
+      "firestore": false,
+      "replicas": 1,
+      "analytics": false
+    },
+    "delivery-outbox": {
+      "module": "delivery_assignment_service.outbox",
+      "probe": "delivery-outbox",
+      "sql": true,
+      "kafka": true,
+      "firestore": false,
+      "replicas": 1,
+      "analytics": false
+    },
+    "kitchen-worker": {
+      "module": "order_service.event_consumer",
+      "probe": "kitchen",
+      "sql": true,
+      "kafka": true,
+      "firestore": true,
+      "replicas": 1,
+      "analytics": false
+    },
+    "kitchen-sync": {
+      "module": "kitchen_workflow.sync",
+      "probe": "kitchen-sync",
+      "sql": true,
+      "kafka": false,
+      "firestore": true,
+      "replicas": 1,
+      "analytics": false
+    },
+    "notification-consumer": {
+      "module": "notification_service.consumer",
+      "probe": "notification-consumer",
+      "sql": true,
+      "kafka": true,
+      "firestore": false,
+      "replicas": 1,
+      "analytics": false
+    },
+    "notification-reconcile": {
+      "module": "notification_service.reconcile",
+      "probe": "notification-reconcile",
+      "sql": true,
+      "kafka": false,
+      "firestore": false,
+      "replicas": 1,
+      "analytics": false
+    },
+    "task-scheduler": {
+      "module": "task_scheduler.leader",
+      "probe": "task-leader",
+      "sql": true,
+      "kafka": false,
+      "firestore": false,
+      "replicas": 2,
+      "analytics": false
+    },
+    "task-worker": {
+      "module": "task_scheduler.worker",
+      "probe": "task-worker",
+      "sql": false,
+      "kafka": false,
+      "firestore": false,
+      "replicas": 2,
+      "analytics": false
+    },
+    "payment-worker": {
+      "module": "payment_service.worker",
+      "probe": "payment-worker",
+      "sql": false,
+      "kafka": false,
+      "firestore": false,
+      "replicas": 2,
+      "analytics": false
+    },
+    "kitchen-stage-worker": {
+      "module": "kitchen_workflow.worker",
+      "probe": "kitchen-stage-worker",
+      "sql": false,
+      "kafka": false,
+      "firestore": false,
+      "replicas": 2,
+      "analytics": false
+    },
+    "delivery-worker": {
+      "module": "delivery_assignment_service.worker",
+      "probe": "delivery-worker",
+      "sql": false,
+      "kafka": false,
+      "firestore": false,
+      "replicas": 2,
+      "analytics": false
+    },
+    "notification-worker": {
+      "module": "notification_service.worker",
+      "probe": "notification-worker",
+      "sql": false,
+      "kafka": false,
+      "firestore": false,
+      "replicas": 2,
+      "analytics": false
+    },
+    "restaurant-analytics-results": {
+      "module": "restaurant_service.analytics_results",
+      "probe": null,
+      "sql": false,
+      "kafka": true,
+      "firestore": true,
+      "replicas": 1,
+      "analytics": true
+    }
+  },
+  "resources": {
+    "requests": {
+      "cpu": "100m",
+      "memory": "192Mi"
+    },
+    "limits": {
+      "cpu": "1000m",
+      "memory": "512Mi"
+    }
+  },
+  "hpa": {
+    "min": 1,
+    "max": 6,
+    "cpu": 60,
+    "memory": 75,
+    "scaleDownSeconds": 180
+  },
+  "zookeeper": {
+    "enabled": true,
+    "image": "zookeeper:3.9.3",
+    "storage": "2Gi"
+  },
+  "webStorage": "2Gi",
+  "ingress": {
+    "enabled": true,
+    "ipName": "food-web-ip"
+  },
+  "metrics": {
+    "enabled": true
+  },
+  "networkPolicy": {
+    "enabled": true
+  },
+  "managedFlink": {
+    "enabled": true,
+    "env": {
+      "REGION": "asia-south1",
+      "DATAPROC_CLUSTER": "food-flink",
+      "KAFKA_SECRET_VERSION": "projects/replace-project-id/secrets/food-kafka/versions/1",
+      "ANALYTICS_CHECKPOINT_URI": "gs://replace-project-id-food-checkpoints/flink",
+      "ANALYTICS_JAR_URI": "gs://replace-project-id-food-artifacts/restaurant-analytics-assignment-v1.jar",
+      "ANALYTICS_RELEASE": "assignment-v1"
+    }
+  },
+  "loadTest": {
+    "enabled": false,
+    "runId": "reviewed-run-1",
+    "env": {
+      "VUS": "60",
+      "RAMP": "1m",
+      "HOLD": "8m",
+      "PAUSE": "0.1"
+    }
+  }
+}

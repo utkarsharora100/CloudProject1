@@ -1,0 +1,83 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "Application",
+      "metadata": {
+        "name": "food-platform",
+        "namespace": "argocd",
+        "annotations": {
+          "argocd.argoproj.io/sync-wave": "0"
+        },
+        "finalizers": [
+          "resources-finalizer.argocd.argoproj.io"
+        ]
+      },
+      "spec": {
+        "project": "default",
+        "source": {
+          "repoURL": "https://github.com/utkarsharora100/CloudProject1.git",
+          "targetRevision": "dev",
+          "path": "deploy/charts/platform"
+        },
+        "destination": {
+          "server": "https://kubernetes.default.svc",
+          "namespace": "platform"
+        },
+        "syncPolicy": {
+          "automated": {
+            "prune": true,
+            "selfHeal": true
+          },
+          "syncOptions": [
+            "CreateNamespace=true",
+            "ServerSideApply=true"
+          ]
+        }
+      }
+    },
+    {
+      "apiVersion": "argoproj.io/v1alpha1",
+      "kind": "Application",
+      "metadata": {
+        "name": "food",
+        "namespace": "argocd",
+        "annotations": {
+          "argocd.argoproj.io/sync-wave": "10"
+        },
+        "finalizers": [
+          "resources-finalizer.argocd.argoproj.io"
+        ]
+      },
+      "spec": {
+        "project": "default",
+        "source": {
+          "repoURL": "https://github.com/utkarsharora100/CloudProject1.git",
+          "targetRevision": "dev",
+          "path": "deploy/charts/food",
+          "helm": {
+            "valueFiles": [
+              "../../environments/example/food-values.json"
+            ]
+          }
+        },
+        "destination": {
+          "server": "https://kubernetes.default.svc",
+          "namespace": "food"
+        },
+        "syncPolicy": {
+          "automated": {
+            "prune": true,
+            "selfHeal": true
+          },
+          "syncOptions": [
+            "CreateNamespace=true",
+            "ServerSideApply=true"
+          ]
+        }
+      }
+    }
+  ]
+}

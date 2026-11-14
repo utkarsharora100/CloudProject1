@@ -1,0 +1,41 @@
+{
+  "uid": "supper-logs",
+  "title": "Supper - centralized service logs",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Application, notification function and Restaurant Flink logs",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 20
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"food-delivery\"}",
+          "queryType": "range"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
+    }
+  ]
+}

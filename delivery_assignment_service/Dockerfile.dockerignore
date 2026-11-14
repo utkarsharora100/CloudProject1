@@ -1,0 +1,22 @@
+# Allow only runtime Python sources and requirements into the local image.
+**
+!delivery_assignment_service/Dockerfile
+!requirements.txt
+!common/
+!common/*.py
+!customer_service/
+!customer_service/*.py
+!order_service/
+!order_service/*.py
+!task_scheduler/
+!task_scheduler/*.py
+!payment_service/
+!payment_service/*.py
+!kitchen_workflow/
+!kitchen_workflow/*.py
+!restaurant_service/
+!restaurant_service/*.py
+!delivery_assignment_service/
+!delivery_assignment_service/*.py
+!local/
+!local/environment.py
