@@ -675,3 +675,37 @@ Use Basic Kafka for the demonstration, keep data retention deliberate, check act
 Actual IAM/IAP access, infrastructure provisioning, DNS/certificate readiness, managed function receipts, the complete order flow, restored Flink state and both HPAs have been checked on this cloud instance. Keep the measured load envelope and the failed 60-VU latency result visible. Before the presentation, resume early, run lifecycle readiness and complete a fresh order; account/trial availability and future provider startup time still need to be checked on the day.
 
 The original source-only baseline remains intact. An additional source-only snapshot of the budget/lifecycle implementation, captured before its publication, is kept locally at `.local-build/recovery/budget-lifecycle-source.zip` with its SHA-256 manifest. Later documentation edits are not retroactively included in that frozen snapshot. It contains source/configuration only, without images, credentials, Terraform state or runtime data.
+
+## 15. Dedicated Kafka and full cloud log evidence
+
+For a new deployment, Terraform can provision the Confluent Basic cluster, its two service identities, scoped application ACLs, and the four topics. The GCP stages still use their existing Terraform roots. The traffic from this deployment stays in its own Kafka cluster.
+
+1. Fill `deploy/config.team.json` from the example, using the new deployment's GCP project and state bucket. Leave `kafka_cluster_id`, `kafka_rest_endpoint`, and `kafka_bootstrap` as empty strings.
+2. Provide a Confluent Cloud management credential privately through the Confluent Terraform provider's `CONFLUENT_CLOUD_API_KEY` and `CONFLUENT_CLOUD_API_SECRET` environment variables. Use a management credential with permissions to create the environment, cluster, service accounts and role bindings. The provisioning stage creates separate cluster-scoped runtime and topic-administration keys.
+3. Run the reviewed Terraform stages in order. Use the same terminal for the management credential and Confluent stage.
+
+```powershell
+python -m deploy.managed_kafka --prepare --cloud AWS --region us-east-2
+python -m deploy.cloud_stage state
+# Inspect the saved state-bucket plan privately, then apply it.
+python -m deploy.cloud_stage state --apply
+python -m deploy.cloud_stage confluent
+# Inspect the saved Confluent plan privately, then apply it.
+python -m deploy.cloud_stage confluent --apply
+python -m deploy.managed_kafka
+python -m deploy.configure
+```
+
+The binding command reads the sensitive Terraform output in memory and creates the two ignored Terraform input files. The command prompts for the operator passphrase. Protect the state bucket, saved plans and local input files because they contain credentials. Keep the original setup in sections 6 and 7 for the existing shared cluster. The dedicated Kafka root is for a fresh deployment, with separate state.
+
+Continue at section 7 with the Cloud and Kafka stages and use the regular release and GitOps steps. For a fresh Dataproc cluster, set `enable_dataproc_job_logging` to `true` in the private configuration before rendering to collect job driver and YARN container logs. This is a Dataproc creation-time setting. For an existing cluster, review the plan for replacement and follow the Flink savepoint restore procedure before scheduling that change.
+
+Cloud Notification delivery runs as the independently deployed Pub/Sub-triggered Cloud Function. It owns the GCS receipt. The GKE notification components manage event routing, subscriptions and inbox/attempt history. Cloud startup requires the function transport, and the order graph only records delivery after the receipt is verified.
+
+After a complete synthetic order and a fresh Flink window, run the cloud log check with the current Dataproc job ID from the release readiness output. Use the start time of this verification run so earlier logs cannot supply the evidence.
+
+```powershell
+python -m deploy.cloud_log_check --project YOUR_PROJECT_ID --prefix YOUR_PREFIX --flink-job YOUR_DATAPROC_JOB_ID --since YOUR_ISO_8601_START_TIME
+```
+
+The checker requires one recent structured request log from each of the eight services, one delivery receipt event from the Cloud Function, and one window-emission marker from the specific Flink job's YARN container log. It prints source status only. A missing source or query error makes the result incomplete and returns a nonzero exit code. The Flink marker shows a processed window. Verify committed output on `restaurant_analytics_results` as a separate streaming check. The existing Grafana dashboard supplies RPS, error rates, p95 latency and Kubernetes health. The Cloud Terraform root also creates a managed-service dashboard, log-based metrics and alerts.

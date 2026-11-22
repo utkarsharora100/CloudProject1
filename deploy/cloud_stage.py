@@ -15,7 +15,7 @@ def file_hash(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 def plan_inputs(config_path, folder, variables, backend):
-    paths = [config_path, variables, ROOT/"deploy/profiles.json", *folder.glob("*.tf.json")]
+    paths = [config_path, variables, ROOT/"deploy/profiles.json", *folder.glob("*.tf.json"), *folder.glob("*.tf"), *folder.glob(".terraform.lock.hcl")]
     private = folder/"secrets.auto.tfvars.json"
     if private.exists():
         paths.append(private)
@@ -25,7 +25,7 @@ def plan_inputs(config_path, folder, variables, backend):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=["state", "cloud", "kafka", "kubeconfig", "controller", "gitops"])
+    parser.add_argument("stage", choices=["state", "confluent", "cloud", "kafka", "kubeconfig", "controller", "gitops"])
     parser.add_argument("--apply", "--apply-reviewed", dest="apply", action="store_true",
                         help="Apply an existing, unchanged reviewed plan; never replan implicitly.")
     parser.add_argument("--allow-standard-capacity", action="store_true",
@@ -33,7 +33,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         config_path = ROOT/"deploy/config.team.json"
-        config = validate(json.loads(config_path.read_text(encoding="utf-8")))
+        bootstrap = args.stage in {"state", "confluent"}
+        config = validate(json.loads(config_path.read_text(encoding="utf-8")), allow_unprovisioned_kafka=bootstrap)
+        if args.stage == "confluent" and config["kafka_cluster_id"]:
+            raise LifecycleError("The Confluent bootstrap stage requires a fresh deployment with blank Kafka fields.")
         inputs = ROOT/".local-build/config/team"
         folder = ROOT/"deploy/terraform"/args.stage
         env = dict(os.environ)
@@ -50,7 +53,7 @@ def main(argv=None):
                  "--zone", config["zone"], "--project", config["project_id"]])
             print("Cloud kubeconfig stored only in the ignored workspace directory.")
             return
-        if args.stage != "state":
+        if not bootstrap:
             guard_running(config)
         if args.stage == "cloud" and config.get("compute_profile", "demo") != "demo" and not args.allow_standard_capacity:
             raise LifecycleError("Larger standard capacity requires explicit owner agreement and --allow-standard-capacity.")
@@ -74,7 +77,7 @@ def main(argv=None):
             receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
             if receipt.get("inputs") != current or receipt.get("plan_sha256") != file_hash(plan):
                 raise LifecycleError("Plan or inputs changed. Create and review a new plan before applying.")
-            if args.stage != "state":
+            if not bootstrap:
                 guard_running(config)
             run(command+["apply", "-input=false", str(plan)])
             if args.stage == "cloud":

@@ -83,6 +83,7 @@ public final class RestaurantAnalytics {
    value.put("unique_order_count",orderCount.value());value.put("event_count",eventCount.value());
    Map<String,Long> counts=new TreeMap<>();for(Map.Entry<String,Long> item:stages.entries())counts.put(item.getKey(),item.getValue());
    value.put("stage_counts",counts);out.collect(JSON.toJson(value));
+   System.out.println("food_flink_window_emitted");
    events.clear();orders.clear();stages.clear();eventCount.clear();orderCount.clear();
   }
  }

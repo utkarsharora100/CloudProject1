@@ -23,6 +23,7 @@ class NotificationTests(unittest.TestCase):
     def setUp(self):
         self.now=datetime(2026,1,1)
         self.directory=tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
         self.provider_engine=create_engine("sqlite://")
         TransportReceipt.__table__.create(self.provider_engine)
         self.transport=SimulatedTransport(self.provider_engine)
@@ -42,7 +43,7 @@ class NotificationTests(unittest.TestCase):
         self.order_id=order.id;self.path="/notifications/orders/"+order.id+"/subscription"
 
     def tearDown(self):
-        db.session.remove();db.engine.dispose();self.context.pop();self.provider_engine.dispose();self.directory.cleanup()
+        db.session.remove();db.engine.dispose();self.context.pop();self.provider_engine.dispose()
 
     def post(self,path,body,key=None):
         return self.client.post(path,json=body,headers={"Idempotency-Key":key or str(uuid.uuid4())})
@@ -335,8 +336,11 @@ class NotificationTests(unittest.TestCase):
 
     def scheduler_app(self):
         from task_scheduler.storage import create_storage_app as scheduler_app
-        return scheduler_app({"TESTING":True,"APP_ENV":"local","AUTO_CREATE_SCHEMA":True,
+        app=scheduler_app({"TESTING":True,"APP_ENV":"local","AUTO_CREATE_SCHEMA":True,
             "SQLALCHEMY_DATABASE_URI":"sqlite:///"+self.directory.name+"/notifications.db"})
+        with app.app_context():
+            self.addCleanup(scheduler_db.engine.dispose)
+        return app
 
     def test_scheduler_rejects_worker_success_without_notification_receipt(self):
         from task_scheduler.store import TaskStore

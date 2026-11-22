@@ -159,7 +159,10 @@ class NotificationStore:
         transport=self.transport
         if transport is None:
             import os
-            if os.environ.get("NOTIFICATION_TRANSPORT","sql")=="function":
+            mode = os.environ.get("NOTIFICATION_TRANSPORT", "sql")
+            if os.environ.get("APP_ENV") == "cloud" and mode != "function":
+                raise RuntimeError("Cloud notifications require the serverless delivery function.")
+            if mode == "function":
                 from notification_service.cloud_transport import FunctionTransport
                 transport=FunctionTransport(db.engine)
             else:transport=SimulatedTransport(db.engine)

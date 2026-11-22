@@ -7,6 +7,9 @@ FACTORIES={"customer":"customer_service.customer_service","order":"order_service
 def create():
     require_profile()
     service=os.environ["SERVICE_NAME"]
+    if service == "notification" and os.environ["APP_ENV"] == "cloud":
+        if os.environ.get("NOTIFICATION_TRANSPORT") != "function":
+            raise RuntimeError("Cloud notifications require the serverless delivery function.")
     module=importlib.import_module(FACTORIES[service])
     app=module.create_app();install(app,service)
     return app

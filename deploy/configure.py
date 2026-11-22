@@ -9,9 +9,13 @@ import zipfile
 from deploy.capacity import selected, apply_to_values
 ROOT=Path(__file__).resolve().parents[1]
 FIELDS={"project_id","region","zone","prefix","public_host","git_repository","git_revision","image_tag","kafka_bootstrap","kafka_cluster_id","kafka_rest_endpoint","dns_zone","admin_cidr","create_firestore","state_bucket","operator_user"}
-def validate(v,allow_example=False):
-    if not isinstance(v,dict) or not FIELDS.issubset(v) or set(v)-FIELDS-{"compute_profile","analytics_release","customer_access"}:raise ValueError("Use exactly the non-secret fields in config.example.json.")
-    if any(type(value) is not str for key,value in v.items() if key!="create_firestore") or type(v["create_firestore"]) is not bool:raise ValueError("Invalid configuration types.")
+KAFKA_FIELDS=("kafka_cluster_id","kafka_rest_endpoint","kafka_bootstrap")
+BOOLEAN_FIELDS={"create_firestore","enable_dataproc_job_logging"}
+
+def validate(v,allow_example=False,*,allow_unprovisioned_kafka=False):
+    if not isinstance(v,dict) or not FIELDS.issubset(v) or set(v)-FIELDS-{"compute_profile","analytics_release","customer_access","enable_dataproc_job_logging"}:raise ValueError("Use exactly the non-secret fields in config.example.json.")
+    if any(type(value) is not (bool if key in BOOLEAN_FIELDS else str) for key,value in v.items()):
+        raise ValueError("Invalid configuration types.")
     selected(v)
     if v.get("customer_access","enabled") not in {"enabled","disabled"}:raise ValueError("Invalid customer access mode.")
     checks={"project_id":r"[a-z][a-z0-9-]{4,28}[a-z0-9]","prefix":r"[a-z][a-z0-9-]{2,14}","region":r"[a-z]+-[a-z]+[0-9]","zone":r"[a-z]+-[a-z]+[0-9]-[a-z]","public_host":r"[a-z0-9][a-z0-9.-]+\.[a-z]{2,}","image_tag":r"[A-Za-z0-9][A-Za-z0-9_.-]{0,100}","operator_user":r"[A-Za-z0-9_-]{3,40}","state_bucket":r"[a-z0-9][a-z0-9.-]{3,61}[a-z0-9]"}
@@ -23,11 +27,13 @@ def validate(v,allow_example=False):
     if not v["zone"].startswith(v["region"]+"-"):raise ValueError("Zone must belong to the configured region.")
     network=ipaddress.ip_network(v["admin_cidr"],strict=True)
     if network.prefixlen<24:raise ValueError("Restrict the control-plane administrator network to /24 or narrower.")
-    for key in ("git_repository","kafka_rest_endpoint"):
+    pending_kafka = allow_unprovisioned_kafka and all(v[key] == "" for key in KAFKA_FIELDS)
+    for key in (("git_repository",) if pending_kafka else ("git_repository","kafka_rest_endpoint")):
         parsed=urlparse(v[key])
         if parsed.scheme!="https" or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:raise ValueError("Use credential-free HTTPS for "+key)
-    if not re.fullmatch(r"[A-Za-z0-9.-]+:9092",v["kafka_bootstrap"]):raise ValueError("Kafka must use a host:9092 endpoint.")
-    if not re.fullmatch(r"lkc-[A-Za-z0-9]+",v["kafka_cluster_id"]):raise ValueError("Invalid Kafka cluster ID.")
+    if not pending_kafka:
+        if not re.fullmatch(r"[A-Za-z0-9.-]+:9092",v["kafka_bootstrap"]):raise ValueError("Kafka must use a host:9092 endpoint.")
+        if not re.fullmatch(r"lkc-[A-Za-z0-9]+",v["kafka_cluster_id"]):raise ValueError("Invalid Kafka cluster ID.")
     if not re.fullmatch(r"[A-Za-z0-9._/-]+",v["git_revision"]) or ".." in v["git_revision"]:raise ValueError("Invalid Git revision.")
     if v["dns_zone"] and not re.fullmatch(r"[a-z][a-z0-9-]{0,62}",v["dns_zone"]):raise ValueError("Invalid existing Cloud DNS zone name.")
     if not allow_example and any(marker in json.dumps(v).lower() for marker in ("replace","example.edu","203.0.113.")):raise ValueError("Replace all example project/domain/Kafka/control-plane values before rendering team configuration.")
@@ -69,6 +75,7 @@ def render(v,target="team",outputs=None):
     ignored=ROOT/".local-build/config"/target;ignored.mkdir(parents=True,exist_ok=True)
     cloud={k:v[k] for k in ("project_id","region","zone","prefix","kafka_bootstrap","public_host","dns_zone","admin_cidr","create_firestore","operator_user")}
     cloud["compute_profile"]=v.get("compute_profile","demo")
+    cloud["enable_dataproc_job_logging"]=v.get("enable_dataproc_job_logging",False)
     write(ignored/"cloud.tfvars.json",cloud)
     write(ignored/"state.tfvars.json",{k:v[k] for k in ("project_id","region","state_bucket")})
     write(ignored/"kafka.tfvars.json",{"cluster_id":v["kafka_cluster_id"],"rest_endpoint":v["kafka_rest_endpoint"],"retention_days":selected(v)[1]["kafka_retention_days"]})

@@ -1,3 +1,4 @@
+from pathlib import Path
 import base64
 import json
 import unittest
@@ -35,7 +36,7 @@ class Contract(unittest.TestCase):
         self.assertEqual(receipt(PAYLOAD,bucket),"replayed");self.assertEqual(bucket.object.data,first)
         self.assertEqual(set(json.loads(first)),{"schema_version","notification_id","payload_digest","delivered_at"})
     def test_cloud_event_decorator_works_with_http_trigger_signature(self):
-        app=functions_framework.create_app(target="deliver_notification",source="/function/main.py",signature_type="http")
+        app=functions_framework.create_app(target="deliver_notification",source=str(Path(__file__).resolve().parents[1] / "main.py"),signature_type="http")
         body={"message":{"data":base64.b64encode(json.dumps(PAYLOAD).encode()).decode()}}
         with patch("main.bucket",return_value=Bucket()):
             response=app.test_client().post("/",json=body,headers={"ce-specversion":"1.0","ce-type":"google.cloud.pubsub.topic.v1.messagePublished","ce-source":"//pubsub.googleapis.com/projects/demo-food-delivery/topics/notification-dispatch","ce-id":"contract-test"})
