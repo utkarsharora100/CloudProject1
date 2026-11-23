@@ -1,6 +1,1 @@
-# Release tag (and, once the build-on-push workflow has run, the digest) for the application image. The digest pins the exact
-# image: when you change imageTag by hand, delete the imageDigest line, or it keeps pointing at the old image.
-# Release tag for the application image. `terraform apply` builds and pushes this tag;
-# Argo CD deploys it. Change it (use a new, immutable tag), apply, then git push.
-imageTag: ci-bddb8a0e85
-imageDigest: sha256:576d8c856960da97c0a857debdf6e919cc6de594a448b7bed2442a481b757c67
+imageTag: demo-1
