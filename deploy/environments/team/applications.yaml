@@ -19,7 +19,7 @@
         "project": "default",
         "source": {
           "repoURL": "https://github.com/utkarsharora100/CloudProject1.git",
-          "targetRevision": "cloud-release-20261118-v15",
+          "targetRevision": "presentation-demo-20261126-100509",
           "path": "deploy/charts/platform"
         },
         "destination": {
@@ -55,7 +55,7 @@
         "project": "default",
         "source": {
           "repoURL": "https://github.com/utkarsharora100/CloudProject1.git",
-          "targetRevision": "cloud-release-20261118-v15",
+          "targetRevision": "presentation-demo-20261126-100509",
           "path": "deploy/charts/food",
           "helm": {
             "valueFiles": [

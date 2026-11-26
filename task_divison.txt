@@ -1,0 +1,114 @@
+FOOD DELIVERY - SUPPER
+Cloud Computing Assignment
+Task Distribution
+
+MICROSERVICES-ORIENTED TASKS
+
++------------------------------+---------------------------------------------------+--------------+
+| Task                         | Responsibilities                                  | Assigned to  |
++------------------------------+---------------------------------------------------+--------------+
+| Customer Service - profiles  | Profile creation/read/update, validation,         | Utkarsh      |
+|                              | unique-email behaviour and checkout-related       |              |
+|                              | customer checks.                                  |              |
++------------------------------+---------------------------------------------------+--------------+
+| Customer Service - addresses | Saved addresses, default-address selection,       | Lokesh       |
+|                              | address ownership and delivery-address            |              |
+|                              | integration.                                      |              |
++------------------------------+---------------------------------------------------+--------------+
+| Restaurant Service and Flink | Menus, prices, availability, Firestore catalog,   | Ankit        |
+|                              | HTTP/gRPC APIs, managed Flink windows and         |              |
+|                              | analytics results.                                |              |
++------------------------------+---------------------------------------------------+--------------+
+| Order Service                | Checkout validation, totals, price/address        | Utkarsh      |
+|                              | snapshots, order history, idempotency and         |              |
+|                              | transactional Kafka outbox.                       |              |
++------------------------------+---------------------------------------------------+--------------+
+| Task Scheduler / DAG         | Prerequisites, AND-joins, conditional branches,   | Ankit        |
+|                              | retries, ZooKeeper leadership, worker ownership,  |              |
+|                              | fencing and recovery.                             |              |
++------------------------------+---------------------------------------------------+--------------+
+| Payment Service              | Simulated payments/declines, explicit retries,    | Ankit        |
+|                              | cancellation/refunds, durable receipts and        |              |
+|                              | duplicate protection.                             |              |
++------------------------------+---------------------------------------------------+--------------+
+| Kitchen Workflow Service     | Acceptance/rejection, preparation/readiness,      | Ankit        |
+|                              | authoritative transitions, Firestore views and    |              |
+|                              | courier/refund coordination.                      |              |
++------------------------------+---------------------------------------------------+--------------+
+| Delivery Assignment Service  | Courier presence, capacity, queue eligibility,    | Lokesh       |
+|                              | assignment, pickup/delivery and capacity release. |              |
++------------------------------+---------------------------------------------------+--------------+
+| Notification Service         | Recipient streams, read state, retries and        | Aniket       |
+|                              | receipt-confirmed in-app messages; coordinate     |              |
+|                              | function integration with Ankit.                  |              |
++------------------------------+---------------------------------------------------+--------------+
+
+CRITERION
+
++---------------------+------------------------------------------------------------+--------------+
+| Criterion           | Task and responsibilities                                  | Assigned to  |
++---------------------+------------------------------------------------------------+--------------+
+| (a)                 | Infrastructure as Code: Terraform/state, networking, IAM,  | Lokesh       |
+|                     | cloud resources and Confluent infrastructure/access        |              |
+|                     | coverage.                                                  |              |
++---------------------+------------------------------------------------------------+--------------+
+| (b) - serverless    | Notification function integration, Pub/Sub/Eventarc        | Ankit        |
+|                     | triggering, durable GCS receipts and receipt verification. |              |
++---------------------+------------------------------------------------------------+--------------+
+| (b) - communication | REST, gRPC and Kafka/messaging contracts, event flows and  | Utkarsh      |
+|                     | service-interaction verification.                          |              |
++---------------------+------------------------------------------------------------+--------------+
+| (c)                 | Managed Kubernetes, GKE workloads, resource/probe          | Ankit        |
+|                     | configuration, Customer/Order HPAs, sustained load tests   |              |
+|                     | and scaling evidence.                                      |              |
++---------------------+------------------------------------------------------------+--------------+
+| (d)                 | GitOps: GitHub release configuration, Helm charts, Argo CD | Lokesh       |
+|                     | applications, synchronization and deployment verification. |              |
++---------------------+------------------------------------------------------------+--------------+
+| (e)                 | Managed Flink: stateful event-time windows, Kafka          | Ankit        |
+|                     | input/results, checkpoints/savepoints and restore          |              |
+|                     | verification.                                              |              |
++---------------------+------------------------------------------------------------+--------------+
+| (f)                 | ZooKeeper scenario: DAG coordination, quorum/leadership,   | Ankit        |
+|                     | worker ownership, fencing and failure recovery.            |              |
++---------------------+------------------------------------------------------------+--------------+
+| (g)                 | Cloud storage: Cloud SQL, Firestore and GCS roles, data    | Aniket       |
+|                     | ownership, persistence checks and storage evidence.        |              |
++---------------------+------------------------------------------------------------+--------------+
+| (h)                 | Observability: Prometheus/Grafana, request/error/latency   | Utkarsh      |
+|                     | and cluster metrics, centralized logs and evidence for all |              |
+|                     | services plus Flink.                                       |              |
++---------------------+------------------------------------------------------------+--------------+
+
+SUPPORTING WORK
+
++------------------------------------------------------------+------------------------------------+
+| Task                                                       | Assigned to                        |
++------------------------------------------------------------+------------------------------------+
+| Architecture, system design and overall service            | Ankit, Lokesh, Utkarsh and Aniket  |
+| integration                                                |                                    |
++------------------------------------------------------------+------------------------------------+
+| Web UI and interactive visualizations                      | Ankit                              |
++------------------------------------------------------------+------------------------------------+
+| Credential protection and secret handling                  | Ankit and Utkarsh                  |
++------------------------------------------------------------+------------------------------------+
+| Cloud resume/pause operation                               | Ankit                              |
++------------------------------------------------------------+------------------------------------+
+| Documentation and report updates                           | Lokesh and Utkarsh                 |
++------------------------------------------------------------+------------------------------------+
+| Integration and failure testing                            | Ankit, Lokesh, Utkarsh and Aniket  |
++------------------------------------------------------------+------------------------------------+
+
+STUDENTS
+
++----------------------------+--------------------+
+| Full name                  | Student ID         |
++----------------------------+--------------------+
+| ANKIT KUMAR SINGH          | 2025H1120155P      |
++----------------------------+--------------------+
+| LOKESH NATHU PATIL         | 2025H1030054P      |
++----------------------------+--------------------+
+| UTKARSH ARORA              | 2025H1120170P      |
++----------------------------+--------------------+
+| ANIKET SAXENA              | 2025H1120169P      |
++----------------------------+--------------------+
